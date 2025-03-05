@@ -144,7 +144,8 @@ impl Builder {
     ) -> anyhow::Result<()> {
         let was_dead_code = self.validator.get_control_frame(0).unwrap().unreachable;
         self.validator.op(op_offset, &op)?;
-        let is_dead_code = self.validator.get_control_frame(0).unwrap().unreachable;
+        let is_dead_code = self.validator.control_stack_height() > 0
+            && self.validator.get_control_frame(0).unwrap().unreachable;
 
         // Only do anything for the transition to dead code, or the transition out of dead code
         if was_dead_code && is_dead_code {

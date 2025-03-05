@@ -10,3 +10,8 @@ wat = "1.226"
 petgraph = "0.7.1"
 pretty = "0.12.3"
 clap = { version = "4.0.0", features = ["derive"] }
+
+[lib]
+
+[[bin]]
+name = "wasm-decompile"

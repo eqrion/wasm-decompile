@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use wat;
 
 mod ir;
-use ir::*;
+pub use ir::*;
 
 #[derive(Parser)]
 #[command(version, about, long_about = None)]
