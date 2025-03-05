@@ -1,0 +1,10 @@
+(module
+    (func
+        unreachable
+    )
+    (func
+        (block
+            unreachable
+        )
+    )
+)

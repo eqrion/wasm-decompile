@@ -20,7 +20,7 @@ fn test_snapshot() {
         module.write(&mut output).unwrap();
         let output_string = String::from_utf8(output).unwrap();
 
-        let expected_path = test_path.with_extension(".snapshot");
+        let expected_path = test_path.with_extension("snapshot");
         if update_snapshots {
             std::fs::write(expected_path, output_string).unwrap();
         } else {

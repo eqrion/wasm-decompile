@@ -65,6 +65,8 @@ pub enum Expression {
     MemoryLoad(MemoryLoadExpression),
     MemorySize,
     MemoryGrow(MemoryGrowExpression),
+
+    Bottom,
 }
 
 pub enum UnaryExpression {

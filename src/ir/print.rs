@@ -251,6 +251,9 @@ impl Expression {
             Expression::MemoryLoad(expr) => expr.pretty(ctx, allocator),
             Expression::MemorySize => allocator.text("memory.size"),
             Expression::MemoryGrow(expr) => expr.pretty(ctx, allocator),
+
+            // Should be eliminated by dead code removal
+            Expression::Bottom => allocator.text("bottom"),
         }
     }
 }

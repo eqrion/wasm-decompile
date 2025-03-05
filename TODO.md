@@ -1,10 +1,9 @@
-1. Function params are not locals
-    - Add the funcType::params to locals.
-    - Tweak printing to discern between locals and params.
-1. Dead code
-    - Ending the block must ignore value stack.
-1. Handle return br, br_if, br_table instructions
-    - Terminate block and transition into dead code.
+1. br_if is hard!
+
+1. Dead code elimination
+1. Block re-numbering to make it RPO
+1. Block fusion for simple control flow
+1. Branch param elimination?
 
 After all of this, test this out on real modules!
 

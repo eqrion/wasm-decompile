@@ -1,0 +1,26 @@
+module {
+
+func 0() {
+  block0:
+    unreachable
+  
+  block1:
+    return 
+}
+
+func 1() {
+  block0:
+    jump block3
+  
+  block1:
+    return 
+  
+  block2:
+    return 
+  
+  block3:
+    unreachable
+}
+
+}
+

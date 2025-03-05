@@ -1,0 +1,18 @@
+module {
+
+func 0() {
+  arg0: i32
+  
+  arg1: i32
+  
+  i0: i32
+  
+  block0:
+    return 
+  
+  block1:
+    return 
+}
+
+}
+
