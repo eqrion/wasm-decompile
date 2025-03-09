@@ -10,16 +10,16 @@ func 0() {
 
 func 1() {
   block0:
-    jump block3
+    jump block2
   
   block1:
     return 
   
   block2:
-    return 
+    unreachable
   
   block3:
-    unreachable
+    return 
 }
 
 }

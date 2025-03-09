@@ -149,6 +149,7 @@ impl Statement {
                 .text("drop")
                 .append(expr.pretty(ctx, allocator).parens()),
             Statement::LocalSet(stmt) => stmt.pretty(ctx, allocator),
+            Statement::LocalSetN(stmt) => stmt.pretty(ctx, allocator),
             Statement::GlobalSet(stmt) => stmt.pretty(ctx, allocator),
             Statement::MemoryStore(stmt) => stmt.pretty(ctx, allocator),
             Statement::Call(expr) => expr.pretty(ctx, allocator),
@@ -167,6 +168,26 @@ impl LocalSetStatement {
         allocator
             .text(&ctx.func.locals[self.index as usize].name)
             .append(allocator.space())
+            .append(allocator.text("="))
+            .append(allocator.space())
+            .append(self.value.pretty(ctx, allocator))
+    }
+}
+
+impl LocalSetNStatement {
+    fn pretty<'b, D, A>(&'b self, ctx: Ctx<'b>, allocator: &'b D) -> DocBuilder<'b, D, A>
+    where
+        D: DocAllocator<'b, A>,
+        D::Doc: Clone,
+        A: Clone,
+    {
+        allocator
+            .intersperse(
+                self.index
+                    .iter()
+                    .map(|x| allocator.text(&ctx.func.locals[*x as usize].name)),
+                allocator.text(", "),
+            )
             .append(allocator.text("="))
             .append(allocator.space())
             .append(self.value.pretty(ctx, allocator))
@@ -246,6 +267,7 @@ impl Expression {
             Expression::Call(expr) => expr.pretty(ctx, allocator),
             Expression::CallIndirect(expr) => expr.pretty(ctx, allocator),
             Expression::GetLocal(expr) => expr.pretty(ctx, allocator),
+            Expression::GetLocalN(expr) => expr.pretty(ctx, allocator),
             Expression::GetGlobal(expr) => expr.pretty(ctx, allocator),
             Expression::Select(expr) => expr.pretty(ctx, allocator),
             Expression::MemoryLoad(expr) => expr.pretty(ctx, allocator),
@@ -302,6 +324,22 @@ impl GetLocalExpression {
         A: Clone,
     {
         allocator.text(&ctx.func.locals[self.local_index as usize].name)
+    }
+}
+
+impl GetLocalNExpression {
+    fn pretty<'b, D, A>(&'b self, ctx: Ctx<'b>, allocator: &'b D) -> DocBuilder<'b, D, A>
+    where
+        D: DocAllocator<'b, A>,
+        D::Doc: Clone,
+        A: Clone,
+    {
+        allocator.intersperse(
+            self.local_indices
+                .iter()
+                .map(|x| allocator.text(&ctx.func.locals[*x as usize].name)),
+            allocator.text(", "),
+        )
     }
 }
 

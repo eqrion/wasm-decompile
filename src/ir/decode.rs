@@ -51,6 +51,7 @@ struct Builder {
     func_index: u32,
     func_type: wasm::FuncType,
     locals: Vec<Local>,
+    temp_count: u32,
     frames: Vec<Frame>,
     stack: Vec<Expression>,
     validator: wasm::FuncValidator<wasm::ValidatorResources>,
@@ -111,6 +112,7 @@ impl Builder {
             func_index,
             func_type,
             locals: locals_with_args,
+            temp_count: 0,
             frames: vec![Frame {
                 kind: FrameKind::Func,
                 unreachable: false,
@@ -147,6 +149,58 @@ impl Builder {
                 .type_index_of_function(func_index)
                 .unwrap(),
         )
+    }
+
+    fn expr_type(&self, expression: &Expression, in_block: &Block) -> Vec<wasm::ValType> {
+        match expression {
+            Expression::I32Const { .. } => vec![wasm::ValType::I32],
+            Expression::I64Const { .. } => vec![wasm::ValType::I64],
+            Expression::F32Const { .. } => vec![wasm::ValType::F32],
+            Expression::F64Const { .. } => vec![wasm::ValType::F64],
+            Expression::GetLocal(GetLocalExpression { local_index }) => {
+                vec![self.locals[*local_index as usize].ty]
+            }
+            Expression::GetLocalN(GetLocalNExpression { local_indices }) => local_indices
+                .iter()
+                .map(|x| self.locals[*x as usize].ty)
+                .collect(),
+            Expression::GetGlobal(GetGlobalExpression { global_index }) => {
+                vec![
+                    self.validator
+                        .resources()
+                        .global_at(*global_index)
+                        .unwrap()
+                        .content_type,
+                ]
+            }
+            Expression::Call(CallExpression { func_index, .. }) => {
+                self.type_of_func(*func_index).results().to_vec()
+            }
+            Expression::CallIndirect(CallIndirectExpression {
+                func_type_index, ..
+            }) => self.func_type(*func_type_index).results().to_vec(),
+            Expression::MemorySize => {
+                // TODO
+                vec![wasm::ValType::I32]
+            }
+            Expression::MemoryGrow(_) => vec![wasm::ValType::I32],
+            Expression::MemoryLoad(MemoryLoadExpression { arg, .. }) => {
+                // TODO
+                vec![wasm::ValType::I32]
+            }
+            Expression::Unary(op, _) => vec![op.result_type()],
+            Expression::Binary(op, _, _) => vec![op.result_type()],
+            Expression::Select(op) => {
+                let on_true = self.expr_type(&op.on_true, in_block);
+                let on_false = self.expr_type(&op.on_false, in_block);
+                assert_eq!(on_true, on_false);
+                on_true
+            }
+            Expression::BlockParam(i) => {
+                vec![in_block.params[*i as usize]]
+            }
+            Expression::Bottom => vec![],
+        }
     }
 
     fn blockty_params(&self, blockty: wasm::BlockType) -> Vec<wasm::ValType> {
@@ -252,11 +306,9 @@ impl Builder {
 
         // Emit drop statements for all the expressions on the stack
         // that would get clobbered by the unconditional branch
-        let dropped_expression_count = self.stack.len() - frame.stack_height;
-        for _ in 0..dropped_expression_count {
-            block
-                .statements
-                .push(Statement::Drop(self.stack.pop().unwrap()));
+        let dropped_values = self.stack.drain(frame.stack_height..);
+        for value in dropped_values {
+            block.statements.push(Statement::Drop(value));
         }
 
         // We don't need to truncate after manually dropping all those expressions
@@ -291,13 +343,56 @@ impl Builder {
         result
     }
 
+    fn sync_stack_before_statement(&mut self) {
+        let frame = self.frames.last_mut().unwrap();
+        for i in frame.stack_height..self.stack.len() {
+            let expr_type = self.expr_type(&self.stack[i], &self.blocks[self.current_block]);
+            if expr_type.is_empty() {
+                assert!(matches!(self.stack[i], Expression::Bottom));
+                continue;
+            }
+
+            let temps_needed = expr_type.len() as u32;
+            let local_start_index = self.locals.len() as u32;
+            let temp_start_index = self.temp_count;
+            self.temp_count += temps_needed;
+
+            // Add temp locals for all the expressions on the stack
+            let mut local_indices = Vec::new();
+            for l in 0..temps_needed {
+                self.locals.push(Local {
+                    ty: expr_type[l as usize],
+                    name: format!("temp{}", temp_start_index + l),
+                });
+                local_indices.push(local_start_index + l);
+            }
+
+            // Replace the expression on the stack with a GetLocalN expression
+            let replacement_expr = Expression::GetLocalN(GetLocalNExpression {
+                local_indices: local_indices.clone(),
+            });
+            // Swap it in on the expression stack, grabbing the original value
+            let init_temp_value = std::mem::replace(&mut self.stack[i], replacement_expr);
+
+            // Add a LocalSetN statement to initialize the temp local
+            let block = self.blocks.node_weight_mut(self.current_block).unwrap();
+            block
+                .statements
+                .push(Statement::LocalSetN(LocalSetNStatement {
+                    index: local_indices,
+                    value: Box::new(init_temp_value),
+                }));
+        }
+    }
+
     fn check_stack_for_block(&mut self, block_params: usize) -> Vec<Expression> {
         let results = self.popn(block_params);
+        self.sync_stack_before_statement();
         self.push_block_params(block_params);
         results
     }
 
-    fn op(
+    fn visit_op(
         &mut self,
         op_offset: usize,
         current_offset: usize,
@@ -342,11 +437,7 @@ impl Builder {
                     return Ok(());
                 }
 
-                if let Some(statement) = self.visit_statement_op(op)? {
-                    let current_block_ref =
-                        self.blocks.node_weight_mut(self.current_block).unwrap();
-                    current_block_ref.statements.push(statement);
-                }
+                self.visit_statement_op(op);
             }
         }
 
@@ -358,16 +449,16 @@ impl Builder {
         let block_results = self.blockty_results(blockty);
         let block_params_count = block_params.len();
 
-        // Create a join block and add a frame for this block
-        let join_block = self.blocks.add_node(Block {
-            params: block_results,
+        // Create the inner block that will contain the block's body
+        let inner_block = self.blocks.add_node(Block {
+            params: block_params,
             statements: Vec::new(),
             terminator: Terminator::Unknown,
         });
 
-        // Create and move to the 'inner_block' block
-        let inner_block = self.blocks.add_node(Block {
-            params: block_params,
+        // Create a join block
+        let join_block = self.blocks.add_node(Block {
+            params: block_results,
             statements: Vec::new(),
             terminator: Terminator::Unknown,
         });
@@ -479,8 +570,10 @@ impl Builder {
 
     fn visit_else_op(&mut self) {
         let frame = self.pop_frame();
+
         let block_params_count = self.blockty_params(frame.blockty).len();
         let block_results_count = self.blockty_results(frame.blockty).len();
+
         let (true_block, false_block, join_block) = match frame.kind {
             FrameKind::If {
                 true_block,
@@ -504,7 +597,11 @@ impl Builder {
         // Pop this block's results and pass them to the join block.
         let results = self.popn(block_results_count);
         // Reset the value stack to the height it was at the start of the if block.
-        self.stack.truncate(frame.stack_height);
+        if frame.unreachable {
+            self.stack.truncate(frame.stack_height);
+        } else {
+            assert!(self.stack.len() == frame.stack_height);
+        }
         // Re-push this block's params.
         self.push_block_params(block_params_count);
 
@@ -519,7 +616,11 @@ impl Builder {
         let block_results_count = self.blockty_results(frame.blockty).len();
         let results = self.popn(block_results_count);
         // Reset the value stack to the height it was at the start of the block.
-        self.stack.truncate(frame.stack_height);
+        if frame.unreachable {
+            self.stack.truncate(frame.stack_height);
+        } else {
+            assert!(self.stack.len() == frame.stack_height);
+        }
 
         match frame.kind {
             FrameKind::Func => {
@@ -639,32 +740,33 @@ impl Builder {
     }
 
     fn visit_br_if_op(&mut self, relative_depth: u32) {
-        // let condition = self.pop();
-        // let branch_params = self.pop_branch_params(relative_depth);
-        // let target_frame = self.frame_at(relative_depth);
+        let condition = self.pop();
+        let branch_params = self.pop_branch_params(relative_depth);
+        self.sync_stack_before_statement();
 
-        // let target_block = if target_frame.kind.is_func() {
-        //     self.return_block
-        // } else {
-        //     target_frame.kind.branch_target_block()
-        // };
+        let target_frame = self.frame_at(relative_depth);
+        let target_block = if target_frame.kind.is_func() {
+            self.return_block
+        } else {
+            target_frame.kind.branch_target_block()
+        };
 
-        // Pass branch_params to the true block.
-        // Pass branch_params and the rest of the value stack to the false block...
-        // TODO
-        unimplemented!();
+        let branch_param_types = branch_params
+            .iter()
+            .flat_map(|x| self.expr_type(x, &self.blocks[self.current_block]))
+            .collect();
+        let fallthrough_block = self.blocks.add_node(Block {
+            params: branch_param_types,
+            statements: Vec::new(),
+            terminator: Terminator::Unknown,
+        });
 
-        // let fallthrough_block = self.blocks.add_node(Block {
-        //     params: Vec::new(),
-        //     statements: Vec::new(),
-        //     terminator: Terminator::Unknown,
-        // });
+        let block = self.blocks.node_weight_mut(self.current_block).unwrap();
+        block.terminator =
+            Terminator::BrIf(condition, target_block, fallthrough_block, branch_params);
 
-        // let block = self.blocks.node_weight_mut(self.current_block).unwrap();
-        // block.terminator = Terminator::BrIf(condition, target_block, fallthrough_block, branch_params);
-
-        // self.after_unconditional_branch();
-        // self.current_block = fallthrough_block;
+        self.after_unconditional_branch();
+        self.current_block = fallthrough_block;
     }
 
     fn visit_br_table_op<'a>(&mut self, br_table: wasm::BrTable<'a>) -> anyhow::Result<()> {
@@ -684,31 +786,31 @@ impl Builder {
         Ok(())
     }
 
-    fn visit_statement_op(&mut self, op: wasm::Operator) -> anyhow::Result<Option<Statement>> {
+    fn visit_statement_op(&mut self, op: wasm::Operator) {
         // We only parse statements if we're not in dead code
         assert!(!self.frame_unreachable(0));
 
-        match op {
-            wasm::Operator::Nop => Ok(Some(Statement::Nop)),
+        let statement = match op {
+            wasm::Operator::Nop => Statement::Nop,
             wasm::Operator::Drop => {
                 let value = self.pop();
-                Ok(Some(Statement::Drop(value)))
+                Statement::Drop(value)
             }
             wasm::Operator::LocalSet { local_index } => {
                 let value = self.pop();
 
-                Ok(Some(Statement::LocalSet(LocalSetStatement {
+                Statement::LocalSet(LocalSetStatement {
                     index: local_index,
                     value: Box::new(value),
-                })))
+                })
             }
             wasm::Operator::GlobalSet { global_index } => {
                 let value = self.pop();
 
-                Ok(Some(Statement::GlobalSet(GlobalSetStatement {
+                Statement::GlobalSet(GlobalSetStatement {
                     index: global_index,
                     value: Box::new(value),
-                })))
+                })
             }
             wasm::Operator::I32Store { memarg }
             | wasm::Operator::I32Store16 { memarg }
@@ -720,11 +822,11 @@ impl Builder {
             | wasm::Operator::F64Store { memarg } => {
                 let value = self.pop();
                 let index = self.pop();
-                Ok(Some(Statement::MemoryStore(MemoryStoreStatement {
+                Statement::MemoryStore(MemoryStoreStatement {
                     arg: memarg,
                     index: Box::new(index),
                     value: Box::new(value),
-                })))
+                })
             }
             wasm::Operator::Call { function_index } => {
                 let func_type = self.type_of_func(function_index);
@@ -737,14 +839,14 @@ impl Builder {
                 };
 
                 if result_count == 0 {
-                    Ok(Some(Statement::Call(call)))
+                    Statement::Call(call)
                 } else {
                     if result_count == 1 {
                         self.stack.push(Expression::Call(call));
                     } else {
                         unimplemented!()
                     }
-                    Ok(None)
+                    return;
                 }
             }
             wasm::Operator::CallIndirect {
@@ -764,21 +866,26 @@ impl Builder {
                 };
 
                 if result_count == 0 {
-                    Ok(Some(Statement::CallIndirect(call)))
+                    Statement::CallIndirect(call)
                 } else {
                     if result_count == 1 {
                         self.stack.push(Expression::CallIndirect(call));
                     } else {
                         unimplemented!()
                     }
-                    Ok(None)
+                    return;
                 }
             }
             _ => {
                 self.expr_op(op);
-                Ok(None)
+                return;
             }
-        }
+        };
+
+        self.sync_stack_before_statement();
+
+        let current_block_ref = self.blocks.node_weight_mut(self.current_block).unwrap();
+        current_block_ref.statements.push(statement);
     }
 
     fn expr_op(&mut self, op: wasm::Operator) {
@@ -1032,7 +1139,7 @@ impl Func {
         let mut operator_reader = body.get_operators_reader()?;
         while !operator_reader.eof() {
             let (op, offset) = operator_reader.read_with_offset()?;
-            builder.op(offset, operator_reader.original_position(), op)?;
+            builder.visit_op(offset, operator_reader.original_position(), op)?;
         }
         operator_reader.ensure_end()?;
 

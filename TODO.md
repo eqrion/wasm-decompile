@@ -1,9 +1,15 @@
-1. br_if is hard!
-
 1. Dead code elimination
 1. Block re-numbering to make it RPO
-1. Block fusion for simple control flow
+1. Block fusion
+1. Critical edge splitting
 1. Branch param elimination?
+  - Create temps and hoist them to dominating point?
+1. Local definition settling
+
+Verification
+  * No critical edges
+
+No global code motion! That will take decompilation too far away from original source.
 
 After all of this, test this out on real modules!
 

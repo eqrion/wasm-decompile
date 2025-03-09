@@ -25,6 +25,7 @@ enum Statement {
     Nop,
     Drop(Expression),
     LocalSet(LocalSetStatement),
+    LocalSetN(LocalSetNStatement),
     GlobalSet(GlobalSetStatement),
     MemoryStore(MemoryStoreStatement),
     Call(CallExpression),
@@ -33,6 +34,11 @@ enum Statement {
 
 pub struct LocalSetStatement {
     index: u32,
+    value: Box<Expression>,
+}
+
+pub struct LocalSetNStatement {
+    index: Vec<u32>,
     value: Box<Expression>,
 }
 
@@ -60,6 +66,7 @@ pub enum Expression {
     Call(CallExpression),
     CallIndirect(CallIndirectExpression),
     GetLocal(GetLocalExpression),
+    GetLocalN(GetLocalNExpression),
     GetGlobal(GetGlobalExpression),
     Select(SelectExpression),
     MemoryLoad(MemoryLoadExpression),
@@ -185,6 +192,67 @@ impl UnaryExpression {
             I64Extend8S => "extend8s",
             I64Extend16S => "extend16s",
             I64Extend32S => "extend32s",
+        }
+    }
+
+    fn result_type(&self) -> wasm::ValType {
+        use UnaryExpression::*;
+        // TODO: check this
+        match self {
+            I32Eqz => wasm::ValType::I32,
+            I64Eqz => wasm::ValType::I32,
+            I32Clz => wasm::ValType::I32,
+            I32Ctz => wasm::ValType::I32,
+            I32Popcnt => wasm::ValType::I32,
+            I64Clz => wasm::ValType::I64,
+            I64Ctz => wasm::ValType::I64,
+            I64Popcnt => wasm::ValType::I64,
+            F32Abs => wasm::ValType::F32,
+            F32Neg => wasm::ValType::F32,
+            F32Ceil => wasm::ValType::F32,
+            F32Floor => wasm::ValType::F32,
+            F32Trunc => wasm::ValType::F32,
+            F32Nearest => wasm::ValType::F32,
+            F32Sqrt => wasm::ValType::F32,
+            F32Copysign => wasm::ValType::F32,
+            F64Abs => wasm::ValType::F64,
+            F64Neg => wasm::ValType::F64,
+            F64Ceil => wasm::ValType::F64,
+            F64Floor => wasm::ValType::F64,
+            F64Trunc => wasm::ValType::F64,
+            F64Nearest => wasm::ValType::F64,
+            F64Sqrt => wasm::ValType::F64,
+            F64Copysign => wasm::ValType::F64,
+            I32WrapI64 => wasm::ValType::I32,
+            I32TruncF32S => wasm::ValType::I32,
+            I32TruncF32U => wasm::ValType::I32,
+            I32TruncF64S => wasm::ValType::I32,
+            I32TruncF64U => wasm::ValType::I32,
+            I64ExtendI32S => wasm::ValType::I64,
+            I64ExtendI32U => wasm::ValType::I64,
+            I64TruncF32S => wasm::ValType::I64,
+            I64TruncF32U => wasm::ValType::I64,
+            I64TruncF64S => wasm::ValType::I64,
+            I64TruncF64U => wasm::ValType::I64,
+            F32ConvertI32S => wasm::ValType::F32,
+            F32ConvertI32U => wasm::ValType::F32,
+            F32ConvertI64S => wasm::ValType::F32,
+            F32ConvertI64U => wasm::ValType::F32,
+            F32DemoteF64 => wasm::ValType::F32,
+            F64ConvertI32S => wasm::ValType::F64,
+            F64ConvertI32U => wasm::ValType::F64,
+            F64ConvertI64S => wasm::ValType::F64,
+            F64ConvertI64U => wasm::ValType::F64,
+            F64PromoteF32 => wasm::ValType::F64,
+            I32ReinterpretF32 => wasm::ValType::I32,
+            I64ReinterpretF64 => wasm::ValType::I64,
+            F32ReinterpretI32 => wasm::ValType::F32,
+            F64ReinterpretI64 => wasm::ValType::F64,
+            I32Extend8S => wasm::ValType::I32,
+            I32Extend16S => wasm::ValType::I32,
+            I64Extend8S => wasm::ValType::I64,
+            I64Extend16S => wasm::ValType::I64,
+            I64Extend32S => wasm::ValType::I64,
         }
     }
 }
@@ -408,6 +476,86 @@ impl BinaryExpression {
             F64Max => ("max", false),
         }
     }
+
+    fn result_type(&self) -> wasm::ValType {
+        use BinaryExpression::*;
+        match self {
+            I32Eq => wasm::ValType::I32,
+            I32Ne => wasm::ValType::I32,
+            I32LtS => wasm::ValType::I32,
+            I32LtU => wasm::ValType::I32,
+            I32GtS => wasm::ValType::I32,
+            I32GtU => wasm::ValType::I32,
+            I32LeS => wasm::ValType::I32,
+            I32LeU => wasm::ValType::I32,
+            I32GeS => wasm::ValType::I32,
+            I32GeU => wasm::ValType::I32,
+            I64Eq => wasm::ValType::I64,
+            I64Ne => wasm::ValType::I64,
+            I64LtS => wasm::ValType::I64,
+            I64LtU => wasm::ValType::I64,
+            I64GtS => wasm::ValType::I64,
+            I64GtU => wasm::ValType::I64,
+            I64LeS => wasm::ValType::I64,
+            I64LeU => wasm::ValType::I64,
+            I64GeS => wasm::ValType::I64,
+            I64GeU => wasm::ValType::I64,
+            F32Eq => wasm::ValType::F32,
+            F32Ne => wasm::ValType::F32,
+            F32Lt => wasm::ValType::F32,
+            F32Gt => wasm::ValType::F32,
+            F32Le => wasm::ValType::F32,
+            F32Ge => wasm::ValType::F32,
+            F64Eq => wasm::ValType::F64,
+            F64Ne => wasm::ValType::F64,
+            F64Lt => wasm::ValType::F64,
+            F64Gt => wasm::ValType::F64,
+            F64Le => wasm::ValType::F64,
+            F64Ge => wasm::ValType::F64,
+            I32Add => wasm::ValType::I32,
+            I32Sub => wasm::ValType::I32,
+            I32Mul => wasm::ValType::I32,
+            I32DivS => wasm::ValType::I32,
+            I32DivU => wasm::ValType::I32,
+            I32RemS => wasm::ValType::I32,
+            I32RemU => wasm::ValType::I32,
+            I32And => wasm::ValType::I32,
+            I32Or => wasm::ValType::I32,
+            I32Xor => wasm::ValType::I32,
+            I32Shl => wasm::ValType::I32,
+            I32ShrS => wasm::ValType::I32,
+            I32ShrU => wasm::ValType::I32,
+            I32Rotl => wasm::ValType::I32,
+            I32Rotr => wasm::ValType::I32,
+            I64Add => wasm::ValType::I64,
+            I64Sub => wasm::ValType::I64,
+            I64Mul => wasm::ValType::I64,
+            I64DivS => wasm::ValType::I64,
+            I64DivU => wasm::ValType::I64,
+            I64RemS => wasm::ValType::I64,
+            I64RemU => wasm::ValType::I64,
+            I64And => wasm::ValType::I64,
+            I64Or => wasm::ValType::I64,
+            I64Xor => wasm::ValType::I64,
+            I64Shl => wasm::ValType::I64,
+            I64ShrS => wasm::ValType::I64,
+            I64ShrU => wasm::ValType::I64,
+            I64Rotl => wasm::ValType::I64,
+            I64Rotr => wasm::ValType::I64,
+            F32Add => wasm::ValType::F32,
+            F32Sub => wasm::ValType::F32,
+            F32Mul => wasm::ValType::F32,
+            F32Div => wasm::ValType::F32,
+            F32Min => wasm::ValType::F32,
+            F32Max => wasm::ValType::F32,
+            F64Add => wasm::ValType::F64,
+            F64Sub => wasm::ValType::F64,
+            F64Mul => wasm::ValType::F64,
+            F64Div => wasm::ValType::F64,
+            F64Min => wasm::ValType::F64,
+            F64Max => wasm::ValType::F64,
+        }
+    }
 }
 
 impl<'a> From<wasm::Operator<'a>> for BinaryExpression {
@@ -506,6 +654,10 @@ pub struct CallIndirectExpression {
 
 pub struct GetLocalExpression {
     local_index: u32,
+}
+
+pub struct GetLocalNExpression {
+    local_indices: Vec<u32>,
 }
 
 pub struct GetGlobalExpression {
