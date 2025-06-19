@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-use pretty::block;
 
 use crate::ir::*;
 
@@ -26,8 +25,8 @@ enum FrameKind {
         join_block: BlockIndex,
     },
     Else {
-        true_block: BlockIndex,
-        false_block: BlockIndex,
+        _true_block: BlockIndex,
+        _false_block: BlockIndex,
         join_block: BlockIndex,
     },
 }
@@ -97,7 +96,7 @@ impl Builder {
             .results()
             .iter()
             .enumerate()
-            .map(|(i, ty)| Expression::BlockParam(i as u32))
+            .map(|(i, _)| Expression::BlockParam(i as u32))
             .collect();
         let return_block_index = BlockIndex(1);
         let return_block = Block {
@@ -193,7 +192,7 @@ impl Builder {
                 vec![wasm::ValType::I32]
             }
             Expression::MemoryGrow(_) => vec![wasm::ValType::I32],
-            Expression::MemoryLoad(MemoryLoadExpression { arg, .. }) => {
+            Expression::MemoryLoad(MemoryLoadExpression { _arg, .. }) => {
                 // TODO
                 vec![wasm::ValType::I32]
             }
@@ -265,12 +264,6 @@ impl Builder {
         &self.frames[index]
     }
 
-    fn frame_at_mut(&mut self, relative_depth: u32) -> &mut Frame {
-        assert!((relative_depth as usize) < self.frames.len());
-        let index = self.frames.len() - relative_depth as usize - 1;
-        &mut self.frames[index]
-    }
-
     fn frame_unreachable(&self, relative_depth: u32) -> bool {
         self.frame_at(relative_depth).unreachable
     }
@@ -304,8 +297,8 @@ impl Builder {
                 join_block: _,
             } => self.blockty_results_count(frame.blockty),
             FrameKind::Else {
-                true_block: _,
-                false_block: _,
+                _true_block,
+                _false_block,
                 join_block: _,
             } => self.blockty_results_count(frame.blockty),
             FrameKind::Func => self.func_type.results().len(),
@@ -630,8 +623,8 @@ impl Builder {
         };
         self.push_frame(Frame {
             kind: FrameKind::Else {
-                true_block,
-                false_block,
+                _true_block: true_block,
+                _false_block: false_block,
                 join_block,
             },
             unreachable: false,
@@ -737,8 +730,8 @@ impl Builder {
                 self.push_block_params(block_results_count);
             }
             FrameKind::Else {
-                true_block: _,
-                false_block: _,
+                _true_block,
+                _false_block,
                 join_block,
             } => {
                 // Terminate with a br(join_block) and move to the join block
@@ -880,7 +873,7 @@ impl Builder {
                 let value = self.pop();
                 let index = self.pop();
                 Statement::MemoryStore(MemoryStoreStatement {
-                    arg: memarg,
+                    _arg: memarg,
                     index: Box::new(index),
                     value: Box::new(value),
                 })
@@ -917,7 +910,7 @@ impl Builder {
 
                 let call = CallIndirectExpression {
                     func_type_index: type_index,
-                    table_index,
+                    _table_index: table_index,
                     callee_index,
                     params,
                 };
@@ -996,14 +989,14 @@ impl Builder {
                 let index = self.pop();
                 self.stack
                     .push(Expression::MemoryLoad(MemoryLoadExpression {
-                        arg: memarg,
+                        _arg: memarg,
                         index: Box::new(index),
                     }));
             }
-            wasm::Operator::MemorySize { mem } => {
+            wasm::Operator::MemorySize { mem: _ } => {
                 self.stack.push(Expression::MemorySize);
             }
-            wasm::Operator::MemoryGrow { mem } => {
+            wasm::Operator::MemoryGrow { mem: _ } => {
                 let value = self.pop();
                 self.stack
                     .push(Expression::MemoryGrow(MemoryGrowExpression {

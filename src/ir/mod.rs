@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::hash::Hash;
 
 use pretty::{DocAllocator, DocBuilder};
-use wasmparser::{self as wasm, BrTable, FuncValidatorAllocations, Global, WasmModuleResources};
+use wasmparser::{self as wasm, FuncValidatorAllocations, WasmModuleResources};
 
 mod decode;
 mod passes;
@@ -104,7 +104,7 @@ pub struct GlobalSetStatement {
 }
 
 pub struct MemoryStoreStatement {
-    arg: wasm::MemArg,
+    _arg: wasm::MemArg,
     index: Box<Expression>,
     value: Box<Expression>,
 }
@@ -704,7 +704,7 @@ pub struct CallExpression {
 
 pub struct CallIndirectExpression {
     func_type_index: u32,
-    table_index: u32,
+    _table_index: u32,
     callee_index: Box<Expression>,
     params: Vec<Expression>,
 }
@@ -728,7 +728,7 @@ pub struct SelectExpression {
 }
 
 pub struct MemoryLoadExpression {
-    arg: wasm::MemArg,
+    _arg: wasm::MemArg,
     index: Box<Expression>,
 }
 

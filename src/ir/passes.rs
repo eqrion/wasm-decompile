@@ -1,6 +1,5 @@
-use std::{collections::HashSet, hash::Hash};
+use std::collections::HashSet;
 
-use pretty::block;
 
 use crate::ir::*;
 
@@ -25,8 +24,6 @@ impl Func {
 
         self.blocks.retain(|node, _block| alive.contains(node));
     }
-
-    pub fn remove_unnecessary_edges(&mut self) {}
 
     pub fn renumber(&mut self) {
         let rpo = self.rpo();
