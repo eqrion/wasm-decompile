@@ -2,24 +2,19 @@ module {
 
 func 0() {
   i0: i32
-  
-  block0:
-    if 42 + 10
-       jump block2
-    else
-      jump block3
-  
-  block1(b0: i32):
-    return b0
-  
-  block2:
-    jump block4(1 + 2)
-  
-  block3:
-    jump block4(3 + 4)
-  
-  block4(b0: i32):
-    return b0
+
+  if 42 + 10
+     br @2
+  br @1
+
+@1:
+  br @3 with (3 + 4)
+
+@2:
+  br @3 with (1 + 2)
+
+@3(b0: i32):
+  return b0
 }
 
 }

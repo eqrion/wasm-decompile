@@ -1,25 +1,14 @@
 module {
 
 func 0() {
-  block0:
-    unreachable
-  
-  block1:
-    return 
+  unreachable
 }
 
 func 1() {
-  block0:
-    jump block2
-  
-  block1:
-    return 
-  
-  block2:
-    unreachable
-  
-  block3:
-    return 
+  br @1
+
+@1:
+  unreachable
 }
 
 }

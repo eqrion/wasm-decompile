@@ -1,10 +1,15 @@
-use petgraph::graph::NodeIndex;
-use petgraph::Graph;
+use std::collections::HashMap;
+use std::hash::Hash;
+
 use pretty::{DocAllocator, DocBuilder};
-use wasmparser::{self as wasm, FuncValidatorAllocations, Global, WasmModuleResources};
+use wasmparser::{self as wasm, BrTable, FuncValidatorAllocations, Global, WasmModuleResources};
 
 mod decode;
+mod passes;
 mod print;
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Hash)]
+pub struct BlockIndex(u32);
 
 pub struct Block {
     params: Vec<wasm::ValType>,
@@ -12,13 +17,64 @@ pub struct Block {
     terminator: Terminator,
 }
 
+impl Block {
+    fn successors(&self) -> Vec<BlockIndex> {
+        self.terminator.successors()
+    }
+
+    fn remap_block_indices(&mut self, mapping: &HashMap<BlockIndex, BlockIndex>) {
+        self.terminator.remap_block_indices(mapping);
+    }
+}
+
 pub enum Terminator {
     Unknown,
     Unreachable,
     Return(Vec<Expression>),
-    Br(NodeIndex, Vec<Expression>),
-    BrIf(Expression, NodeIndex, NodeIndex, Vec<Expression>),
-    BrTable(Vec<NodeIndex>, NodeIndex, Vec<Expression>),
+    Br(BlockIndex, Vec<Expression>),
+    BrIf(Expression, BlockIndex, BlockIndex, Vec<Expression>),
+    BrTable(Vec<BlockIndex>, BlockIndex, Vec<Expression>),
+}
+
+impl Terminator {
+    fn is_empty_return(&self) -> bool {
+        match self {
+            Terminator::Return(exprs) => exprs.is_empty(),
+            _ => false,
+        }
+    }
+
+    fn successors(&self) -> Vec<BlockIndex> {
+        match self {
+            Terminator::Br(target, ..) => vec![*target],
+            Terminator::BrIf(_, true_block, false_block, _) => vec![*true_block, *false_block],
+            Terminator::BrTable(targets, unknown_target, _) => {
+                let mut result = targets.clone();
+                result.push(*unknown_target);
+                result
+            }
+            _ => vec![],
+        }
+    }
+
+    fn remap_block_indices(&mut self, mapping: &HashMap<BlockIndex, BlockIndex>) {
+        match self {
+            Terminator::Br(target, ..) => {
+                *target = *mapping.get(target).unwrap();
+            }
+            Terminator::BrIf(_, true_block, false_block, _) => {
+                *true_block = *mapping.get(true_block).unwrap();
+                *false_block = *mapping.get(false_block).unwrap();
+            }
+            Terminator::BrTable(targets, unknown_target, _) => {
+                for target in targets {
+                    *target = *mapping.get(target).unwrap();
+                }
+                *unknown_target = *mapping.get(unknown_target).unwrap();
+            }
+            _ => {}
+        }
+    }
 }
 
 enum Statement {
@@ -73,6 +129,7 @@ pub enum Expression {
     MemorySize,
     MemoryGrow(MemoryGrowExpression),
 
+    // Synthesized when popping from an unreachable stack. Should be eliminated by DCE.
     Bottom,
 }
 
@@ -689,8 +746,33 @@ struct Func {
     index: u32,
     ty: wasm::FuncType,
     locals: Vec<Local>,
-    blocks: Graph<Block, ()>,
-    entry_block: NodeIndex,
+    blocks: HashMap<BlockIndex, Block>,
+    entry_block: BlockIndex,
+}
+
+impl Func {
+    fn remap_block_indices(&mut self, mapping: &HashMap<BlockIndex, BlockIndex>) {
+        let old_blocks = std::mem::replace(&mut self.blocks, HashMap::new());
+        let mut new_blocks = HashMap::new();
+
+        for (block_index, mut block) in old_blocks {
+            block.remap_block_indices(&mapping);
+            new_blocks.insert(*mapping.get(&block_index).unwrap(), block);
+        }
+        self.blocks = new_blocks;
+        self.entry_block = *mapping.get(&self.entry_block).unwrap();
+    }
+
+    fn visual_block_order(&self) -> Vec<BlockIndex> {
+        let mut keys: Vec<BlockIndex> = self.blocks.keys().map(|x| *x).collect();
+        keys.sort();
+        keys
+    }
+
+    fn optimize(&mut self) {
+        self.eliminate_dead_code();
+        self.renumber();
+    }
 }
 
 pub struct Module {
@@ -796,7 +878,15 @@ impl Module {
             }
         }
 
+        result.optimize();
+
         Ok(result)
+    }
+
+    fn optimize(&mut self) {
+        for func in &mut self.funcs {
+            func.optimize();
+        }
     }
 
     pub fn write(&self, mut output: impl std::io::Write) -> anyhow::Result<()> {

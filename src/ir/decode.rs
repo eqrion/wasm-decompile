@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use pretty::block;
 
 use crate::ir::*;
@@ -12,21 +14,21 @@ struct Frame {
 enum FrameKind {
     Func,
     Block {
-        join_block: NodeIndex,
+        join_block: BlockIndex,
     },
     Loop {
-        header_block: NodeIndex,
-        join_block: NodeIndex,
+        header_block: BlockIndex,
+        join_block: BlockIndex,
     },
     If {
-        true_block: NodeIndex,
-        false_block: NodeIndex,
-        join_block: NodeIndex,
+        true_block: BlockIndex,
+        false_block: BlockIndex,
+        join_block: BlockIndex,
     },
     Else {
-        true_block: NodeIndex,
-        false_block: NodeIndex,
-        join_block: NodeIndex,
+        true_block: BlockIndex,
+        false_block: BlockIndex,
+        join_block: BlockIndex,
     },
 }
 
@@ -35,7 +37,7 @@ impl FrameKind {
         matches!(self, FrameKind::Func)
     }
 
-    fn branch_target_block(&self) -> NodeIndex {
+    fn branch_target_block(&self) -> BlockIndex {
         match self {
             FrameKind::Block { join_block } => *join_block,
             FrameKind::Loop { header_block, .. } => *header_block,
@@ -55,10 +57,11 @@ struct Builder {
     frames: Vec<Frame>,
     stack: Vec<Expression>,
     validator: wasm::FuncValidator<wasm::ValidatorResources>,
-    blocks: Graph<Block, ()>,
-    start_block: NodeIndex,
-    current_block: NodeIndex,
-    return_block: NodeIndex,
+    blocks: HashMap<BlockIndex, Block>,
+    start_block: BlockIndex,
+    current_block: BlockIndex,
+    return_block: BlockIndex,
+    next_block_index: BlockIndex,
 }
 
 impl Builder {
@@ -80,12 +83,15 @@ impl Builder {
             .unwrap_func()
             .clone();
 
-        let mut blocks = Graph::new();
-        let start_block = blocks.add_node(Block {
+        let mut blocks = HashMap::new();
+
+        let start_block_index = BlockIndex(0);
+        let start_block = Block {
             params: Vec::new(),
             statements: Vec::new(),
             terminator: Terminator::Unknown,
-        });
+        };
+        blocks.insert(start_block_index, start_block);
 
         let return_block_results = func_type
             .results()
@@ -93,11 +99,13 @@ impl Builder {
             .enumerate()
             .map(|(i, ty)| Expression::BlockParam(i as u32))
             .collect();
-        let return_block = blocks.add_node(Block {
+        let return_block_index = BlockIndex(1);
+        let return_block = Block {
             params: func_type.results().to_vec(),
             statements: Vec::new(),
             terminator: Terminator::Return(return_block_results),
-        });
+        };
+        blocks.insert(return_block_index, return_block);
 
         let mut locals_with_args = Vec::new();
         for (i, param) in func_type.params().iter().enumerate() {
@@ -127,9 +135,10 @@ impl Builder {
             stack: Vec::new(),
             validator,
             blocks,
-            start_block,
-            current_block: start_block,
-            return_block,
+            start_block: start_block_index,
+            current_block: start_block_index,
+            return_block: return_block_index,
+            next_block_index: BlockIndex(2),
         }
     }
 
@@ -235,6 +244,13 @@ impl Builder {
         }
     }
 
+    fn add_block(&mut self, node: Block) -> BlockIndex {
+        let block_index = self.next_block_index;
+        self.next_block_index = BlockIndex(block_index.0 + 1);
+        self.blocks.insert(block_index, node);
+        block_index
+    }
+
     fn push_frame(&mut self, frame: Frame) {
         self.frames.push(frame);
     }
@@ -259,7 +275,7 @@ impl Builder {
         self.frame_at(relative_depth).unreachable
     }
 
-    fn branch_target_block(&self, relative_depth: u32) -> NodeIndex {
+    fn branch_target_block(&self, relative_depth: u32) -> BlockIndex {
         let frame = self.frame_at(relative_depth);
         if frame.kind.is_func() {
             self.return_block
@@ -300,7 +316,8 @@ impl Builder {
     fn after_unconditional_branch(&mut self) {
         let frame = self.frames.last_mut().unwrap();
         assert!(!frame.unreachable);
-        let block = self.blocks.node_weight_mut(self.current_block).unwrap();
+        let block = self.blocks.get_mut(&self.current_block).unwrap();
+
         // TODO
         // assert!(block.terminator != Terminator::Unknown);
 
@@ -346,7 +363,10 @@ impl Builder {
     fn sync_stack_before_statement(&mut self) {
         let frame = self.frames.last_mut().unwrap();
         for i in frame.stack_height..self.stack.len() {
-            let expr_type = self.expr_type(&self.stack[i], &self.blocks[self.current_block]);
+            let expr_type = self.expr_type(
+                &self.stack[i],
+                self.blocks.get(&self.current_block).unwrap(),
+            );
             if expr_type.is_empty() {
                 assert!(matches!(self.stack[i], Expression::Bottom));
                 continue;
@@ -375,7 +395,7 @@ impl Builder {
             let init_temp_value = std::mem::replace(&mut self.stack[i], replacement_expr);
 
             // Add a LocalSetN statement to initialize the temp local
-            let block = self.blocks.node_weight_mut(self.current_block).unwrap();
+            let block = self.blocks.get_mut(&self.current_block).unwrap();
             block
                 .statements
                 .push(Statement::LocalSetN(LocalSetNStatement {
@@ -417,18 +437,43 @@ impl Builder {
                 self.visit_end_op(current_offset)?;
             }
             wasm::Operator::Unreachable => {
+                // If our current frame is in unreachable code, don't codegen anything
+                if self.frame_unreachable(0) {
+                    return Ok(());
+                }
+
                 self.visit_unreachable_op();
             }
             wasm::Operator::Return => {
+                // If our current frame is in unreachable code, don't codegen anything
+                if self.frame_unreachable(0) {
+                    return Ok(());
+                }
+
                 self.visit_return_op();
             }
             wasm::Operator::Br { relative_depth } => {
+                // If our current frame is in unreachable code, don't codegen anything
+                if self.frame_unreachable(0) {
+                    return Ok(());
+                }
+
                 self.visit_br_op(relative_depth);
             }
             wasm::Operator::BrIf { relative_depth } => {
+                // If our current frame is in unreachable code, don't codegen anything
+                if self.frame_unreachable(0) {
+                    return Ok(());
+                }
+
                 self.visit_br_if_op(relative_depth);
             }
             wasm::Operator::BrTable { targets } => {
+                // If our current frame is in unreachable code, don't codegen anything
+                if self.frame_unreachable(0) {
+                    return Ok(());
+                }
+
                 self.visit_br_table_op(targets)?;
             }
             _ => {
@@ -450,14 +495,14 @@ impl Builder {
         let block_params_count = block_params.len();
 
         // Create the inner block that will contain the block's body
-        let inner_block = self.blocks.add_node(Block {
+        let inner_block = self.add_block(Block {
             params: block_params,
             statements: Vec::new(),
             terminator: Terminator::Unknown,
         });
 
         // Create a join block
-        let join_block = self.blocks.add_node(Block {
+        let join_block = self.add_block(Block {
             params: block_results,
             statements: Vec::new(),
             terminator: Terminator::Unknown,
@@ -468,7 +513,7 @@ impl Builder {
         let stack_height = self.stack.len() - block_params_count;
 
         // Jump to the inner block
-        let current_block_ref = self.blocks.node_weight_mut(self.current_block).unwrap();
+        let current_block_ref = self.blocks.get_mut(&self.current_block).unwrap();
         current_block_ref.terminator = Terminator::Br(inner_block, results);
         self.current_block = inner_block;
 
@@ -487,14 +532,14 @@ impl Builder {
         let block_params_count = block_params.len();
 
         // Create the 'loop_header' block
-        let header_block = self.blocks.add_node(Block {
+        let header_block = self.add_block(Block {
             params: block_params,
             statements: Vec::new(),
             terminator: Terminator::Unknown,
         });
 
         // Create a join block
-        let join_block = self.blocks.add_node(Block {
+        let join_block = self.add_block(Block {
             params: block_results,
             statements: Vec::new(),
             terminator: Terminator::Unknown,
@@ -505,7 +550,7 @@ impl Builder {
         let stack_height = self.stack.len() - block_params_count;
 
         // Move to the loop header block
-        let current_block_ref = self.blocks.node_weight_mut(self.current_block).unwrap();
+        let current_block_ref = self.blocks.get_mut(&self.current_block).unwrap();
         current_block_ref.terminator = Terminator::Br(header_block, results);
         self.current_block = header_block;
 
@@ -527,17 +572,17 @@ impl Builder {
         let block_params_count = block_params.len();
 
         // Create the true, false, and join blocks
-        let true_block = self.blocks.add_node(Block {
+        let true_block = self.add_block(Block {
             params: block_params.clone(),
             statements: Vec::new(),
             terminator: Terminator::Unknown,
         });
-        let false_block = self.blocks.add_node(Block {
+        let false_block = self.add_block(Block {
             params: block_params,
             statements: Vec::new(),
             terminator: Terminator::Unknown,
         });
-        let join_block = self.blocks.add_node(Block {
+        let join_block = self.add_block(Block {
             params: block_results,
             statements: Vec::new(),
             terminator: Terminator::Unknown,
@@ -550,7 +595,7 @@ impl Builder {
         let stack_height = self.stack.len() - block_params_count;
 
         // Terminate the if predecessor block with br_if(true, false) and then move to the 'true_block'
-        let current_block_ref = self.blocks.node_weight_mut(self.current_block).unwrap();
+        let current_block_ref = self.blocks.get_mut(&self.current_block).unwrap();
         current_block_ref.terminator =
             Terminator::BrIf(condition, true_block, false_block, results);
         self.current_block = true_block;
@@ -606,7 +651,7 @@ impl Builder {
         self.push_block_params(block_params_count);
 
         // Terminate the true block with br(join) and then move to the 'false_block'
-        let current_block_ref = self.blocks.node_weight_mut(self.current_block).unwrap();
+        let current_block_ref = self.blocks.get_mut(&self.current_block).unwrap();
         current_block_ref.terminator = Terminator::Br(join_block, results);
         self.current_block = false_block;
     }
@@ -625,7 +670,7 @@ impl Builder {
         match frame.kind {
             FrameKind::Func => {
                 // Terminate the function with a return
-                let current_block_ref = self.blocks.node_weight_mut(self.current_block).unwrap();
+                let current_block_ref = self.blocks.get_mut(&self.current_block).unwrap();
                 if !frame.unreachable {
                     current_block_ref.terminator = Terminator::Return(results);
                 } else {
@@ -637,7 +682,7 @@ impl Builder {
             }
             FrameKind::Block { join_block } => {
                 // Terminate with a br to the join block
-                let current_block_ref = self.blocks.node_weight_mut(self.current_block).unwrap();
+                let current_block_ref = self.blocks.get_mut(&self.current_block).unwrap();
                 if !frame.unreachable {
                     current_block_ref.terminator = Terminator::Br(join_block, results);
                 } else {
@@ -652,7 +697,7 @@ impl Builder {
                 join_block,
             } => {
                 // Terminate with a br to the join block
-                let current_block_ref = self.blocks.node_weight_mut(self.current_block).unwrap();
+                let current_block_ref = self.blocks.get_mut(&self.current_block).unwrap();
                 if !frame.unreachable {
                     current_block_ref.terminator = Terminator::Br(join_block, results);
                 } else {
@@ -668,7 +713,7 @@ impl Builder {
                 join_block,
             } => {
                 // Terminate the true block with a br(join_block)
-                let current_block_ref = self.blocks.node_weight_mut(self.current_block).unwrap();
+                let current_block_ref = self.blocks.get_mut(&self.current_block).unwrap();
                 if !frame.unreachable {
                     current_block_ref.terminator = Terminator::Br(join_block, results);
                 } else {
@@ -684,7 +729,7 @@ impl Builder {
                 let block_params_count = block_results_count;
                 self.push_block_params(block_params_count);
                 let results = self.popn(block_results_count);
-                let false_block_ref = self.blocks.node_weight_mut(false_block).unwrap();
+                let false_block_ref = self.blocks.get_mut(&false_block).unwrap();
                 false_block_ref.terminator = Terminator::Br(join_block, results);
 
                 // Move to the join block
@@ -697,7 +742,7 @@ impl Builder {
                 join_block,
             } => {
                 // Terminate with a br(join_block) and move to the join block
-                let current_block_ref = self.blocks.node_weight_mut(self.current_block).unwrap();
+                let current_block_ref = self.blocks.get_mut(&self.current_block).unwrap();
                 if !frame.unreachable {
                     current_block_ref.terminator = Terminator::Br(join_block, results);
                 } else {
@@ -713,7 +758,7 @@ impl Builder {
     }
 
     fn visit_unreachable_op(&mut self) {
-        let block = self.blocks.node_weight_mut(self.current_block).unwrap();
+        let block = self.blocks.get_mut(&self.current_block).unwrap();
         block.terminator = Terminator::Unreachable;
 
         self.after_unconditional_branch();
@@ -728,11 +773,11 @@ impl Builder {
         let branch_params = self.pop_branch_params(relative_depth);
         let target_frame = self.frame_at(relative_depth);
         if target_frame.kind.is_func() {
-            let block = self.blocks.node_weight_mut(self.current_block).unwrap();
+            let block = self.blocks.get_mut(&self.current_block).unwrap();
             block.terminator = Terminator::Return(branch_params);
         } else {
             let target_block = target_frame.kind.branch_target_block();
-            let block = self.blocks.node_weight_mut(self.current_block).unwrap();
+            let block = self.blocks.get_mut(&self.current_block).unwrap();
             block.terminator = Terminator::Br(target_block, branch_params);
         }
 
@@ -753,15 +798,15 @@ impl Builder {
 
         let branch_param_types = branch_params
             .iter()
-            .flat_map(|x| self.expr_type(x, &self.blocks[self.current_block]))
+            .flat_map(|x| self.expr_type(x, self.blocks.get(&self.current_block).unwrap()))
             .collect();
-        let fallthrough_block = self.blocks.add_node(Block {
+        let fallthrough_block = self.add_block(Block {
             params: branch_param_types,
             statements: Vec::new(),
             terminator: Terminator::Unknown,
         });
 
-        let block = self.blocks.node_weight_mut(self.current_block).unwrap();
+        let block = self.blocks.get_mut(&self.current_block).unwrap();
         block.terminator =
             Terminator::BrIf(condition, target_block, fallthrough_block, branch_params);
 
@@ -779,7 +824,7 @@ impl Builder {
             targets.push(self.branch_target_block(relative_depth?));
         }
 
-        let block = self.blocks.node_weight_mut(self.current_block).unwrap();
+        let block = self.blocks.get_mut(&self.current_block).unwrap();
         block.terminator = Terminator::BrTable(targets, default_target, branch_params);
 
         self.after_unconditional_branch();
@@ -798,6 +843,18 @@ impl Builder {
             }
             wasm::Operator::LocalSet { local_index } => {
                 let value = self.pop();
+
+                Statement::LocalSet(LocalSetStatement {
+                    index: local_index,
+                    value: Box::new(value),
+                })
+            }
+            wasm::Operator::LocalTee { local_index } => {
+                let value = self.pop();
+
+                self.stack.push(Expression::GetLocal(GetLocalExpression {
+                    local_index: local_index,
+                }));
 
                 Statement::LocalSet(LocalSetStatement {
                     index: local_index,
@@ -884,7 +941,7 @@ impl Builder {
 
         self.sync_stack_before_statement();
 
-        let current_block_ref = self.blocks.node_weight_mut(self.current_block).unwrap();
+        let current_block_ref = self.blocks.get_mut(&self.current_block).unwrap();
         current_block_ref.statements.push(statement);
     }
 

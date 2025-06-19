@@ -7,7 +7,6 @@ edition = "2021"
 anyhow = "1"
 wasmparser = {version = "0.226", features = ["validate"]}
 wat = "1.226"
-petgraph = "0.7.1"
 pretty = "0.12.3"
 clap = { version = "4.0.0", features = ["derive"] }
 

@@ -8,7 +8,9 @@ struct Ctx<'b> {
 impl Block {
     fn pretty<'b, D, A>(
         &'b self,
-        index: NodeIndex,
+        func: &Func,
+        index: BlockIndex,
+        is_last_block: bool,
         ctx: Ctx<'b>,
         allocator: &'b D,
     ) -> DocBuilder<'b, D, A>
@@ -17,11 +19,18 @@ impl Block {
         D::Doc: Clone,
         A: Clone,
     {
+        // The entry block is guaranteed to be printed first. See assertion in printing Func.
+        let is_entry_block = index == func.entry_block;
+        // The entry block cannot have params, so we can skip printing the block label.
+        assert!(!is_entry_block || self.params.is_empty());
+
         let mut instructions = vec![];
         for statement in &self.statements {
             instructions.push(statement.pretty(ctx, allocator));
         }
-        instructions.push(self.terminator.pretty(ctx, allocator));
+        if !is_last_block || !self.terminator.is_empty_return() {
+            instructions.push(self.terminator.pretty(ctx, allocator));
+        }
 
         let params = self.params.iter().enumerate().map(|(i, param)| {
             allocator
@@ -30,20 +39,25 @@ impl Block {
                 .append(allocator.text(param.to_string()))
         });
 
-        allocator
-            .text(format!("block{}", index.index()))
-            .append(if self.params.is_empty() {
-                allocator.nil()
-            } else {
-                allocator.intersperse(params, allocator.text(", ")).parens()
-            })
-            .append(allocator.text(":"))
-            .append(allocator.hardline())
-            .append(
-                allocator
-                    .intersperse(instructions, allocator.hardline())
-                    .indent(2),
-            )
+        let label = if is_entry_block {
+            allocator.nil()
+        } else {
+            allocator
+                .text(format!("@{}", index.0))
+                .append(if self.params.is_empty() {
+                    allocator.nil()
+                } else {
+                    allocator.intersperse(params, allocator.text(", ")).parens()
+                })
+                .append(allocator.text(":"))
+                .append(allocator.hardline())
+        };
+
+        label.append(
+            allocator
+                .intersperse(instructions, allocator.hardline())
+                .indent(2),
+        )
     }
 }
 
@@ -64,26 +78,42 @@ impl Terminator {
                     params.iter().map(|param| param.pretty(ctx, allocator)),
                     allocator.text(", "),
                 )),
-            Terminator::Br(target, params) => allocator
-                .text(format!("jump block{}", target.index()))
-                .append(if params.is_empty() {
+            Terminator::Br(target, params) => {
+                let params = if params.is_empty() {
                     allocator.nil()
                 } else {
                     allocator
-                        .intersperse(
-                            params.iter().map(|param| param.pretty(ctx, allocator)),
-                            allocator.text(", "),
+                        .space()
+                        .append(allocator.text("with"))
+                        .append(allocator.space())
+                        .append(
+                            allocator
+                                .intersperse(
+                                    params.iter().map(|param| param.pretty(ctx, allocator)),
+                                    allocator.text(", "),
+                                )
+                                .parens(),
                         )
-                        .parens()
-                }),
+                };
+
+                allocator.text(format!("br @{}", target.0)).append(params)
+            }
             Terminator::BrIf(condition, true_target, false_target, params) => {
                 let params = if params.is_empty() {
                     allocator.nil()
                 } else {
-                    allocator.intersperse(
-                        params.iter().map(|param| param.pretty(ctx, allocator)),
-                        allocator.text(", "),
-                    )
+                    allocator
+                        .space()
+                        .append(allocator.text("with"))
+                        .append(allocator.space())
+                        .append(
+                            allocator
+                                .intersperse(
+                                    params.iter().map(|param| param.pretty(ctx, allocator)),
+                                    allocator.text(", "),
+                                )
+                                .parens(),
+                        )
                 };
 
                 allocator
@@ -93,39 +123,48 @@ impl Terminator {
                     .append(allocator.hardline())
                     .append(
                         allocator
-                            .text(format!(" jump block{}", true_target.index()))
+                            .text(format!(" br @{}", true_target.0))
                             .append(params.clone())
                             .indent(2),
                     )
                     .append(allocator.hardline())
-                    .append("else")
-                    .append(allocator.hardline())
                     .append(
                         allocator
-                            .text(format!("jump block{}", false_target.index()))
-                            .append(params)
-                            .indent(2),
+                            .text(format!("br @{}", false_target.0))
+                            .append(params),
                     )
             }
             Terminator::BrTable(targets, default_target, params) => {
-                let params = allocator.intersperse(
-                    params.iter().map(|param| param.pretty(ctx, allocator)),
-                    allocator.text(", "),
-                );
+                let params = if params.is_empty() {
+                    allocator.nil()
+                } else {
+                    allocator
+                        .space()
+                        .append(allocator.text("with"))
+                        .append(allocator.space())
+                        .append(
+                            allocator
+                                .intersperse(
+                                    params.iter().map(|param| param.pretty(ctx, allocator)),
+                                    allocator.text(", "),
+                                )
+                                .parens(),
+                        )
+                };
+
                 let targets = allocator.intersperse(
-                    targets
-                        .iter()
-                        .map(|x| allocator.text(format!("block{}", x.index()))),
+                    targets.iter().map(|x| allocator.text(format!("@{}", x.0))),
                     allocator.text(", "),
                 );
+
                 allocator
-                    .text("jump_table")
+                    .text("br_table")
                     .append(
                         targets
                             .append(
-                                allocator.text(" default ").append(
-                                    allocator.text(format!("block{}", default_target.index())),
-                                ),
+                                allocator
+                                    .text(" default ")
+                                    .append(allocator.text(format!("@{}", default_target.0))),
                             )
                             .parens(),
                     )
@@ -188,6 +227,7 @@ impl LocalSetNStatement {
                     .map(|x| allocator.text(&ctx.func.locals[*x as usize].name)),
                 allocator.text(", "),
             )
+            .append(allocator.space())
             .append(allocator.text("="))
             .append(allocator.space())
             .append(self.value.pretty(ctx, allocator))
@@ -344,7 +384,7 @@ impl GetLocalNExpression {
 }
 
 impl GetGlobalExpression {
-    fn pretty<'b, D, A>(&'b self, ctx: Ctx<'b>, allocator: &'b D) -> DocBuilder<'b, D, A>
+    fn pretty<'b, D, A>(&'b self, _ctx: Ctx<'b>, allocator: &'b D) -> DocBuilder<'b, D, A>
     where
         D: DocAllocator<'b, A>,
         D::Doc: Clone,
@@ -408,33 +448,76 @@ impl Func {
         D::Doc: Clone,
         A: Clone,
     {
-        let mut items = vec![];
-        for local in &self.locals {
-            items.push(
-                allocator
-                    .text(&local.name)
-                    .append(allocator.text(": "))
-                    .append(allocator.text(local.ty.to_string())),
-            );
-        }
-        for block in self.blocks.node_indices() {
-            items.push(self.blocks.node_weight(block).unwrap().pretty(
-                block,
-                Ctx { func: self },
-                allocator,
-            ));
-        }
+        let params = self.ty.params();
+        let num_params = params.len();
+
+        let param_group = if params.is_empty() {
+            allocator.nil()
+        } else {
+            let mut param_items = vec![];
+            for param in &self.locals[0..num_params] {
+                param_items.push(
+                    allocator
+                        .text(&param.name)
+                        .append(allocator.text(": "))
+                        .append(allocator.text(param.ty.to_string())),
+                );
+            }
+            allocator.intersperse(param_items, allocator.text(", "))
+        };
+
+        let local_group = if self.locals.is_empty() {
+            allocator.nil()
+        } else {
+            let mut local_items = vec![];
+            for local in &self.locals[num_params..self.locals.len()] {
+                local_items.push(
+                    allocator
+                        .text(&local.name)
+                        .append(allocator.text(": "))
+                        .append(allocator.text(local.ty.to_string())),
+                );
+            }
+            allocator
+                .intersperse(local_items, allocator.hardline())
+                .indent(2)
+                .enclose(allocator.hardline(), allocator.hardline())
+        };
+
+        let block_group = if self.blocks.is_empty() {
+            allocator.nil()
+        } else {
+            let mut block_items = vec![];
+
+            let visual_block_order = self.visual_block_order();
+            assert!(self.entry_block == visual_block_order[0]);
+            for index in &visual_block_order {
+                let block = self.blocks.get(&index).unwrap();
+                let is_last_block = *index == visual_block_order[visual_block_order.len() - 1];
+                block_items.push(block.pretty(
+                    self,
+                    *index,
+                    is_last_block,
+                    Ctx { func: self },
+                    allocator,
+                ));
+            }
+
+            allocator
+                .intersperse(
+                    block_items,
+                    allocator.hardline().append(allocator.hardline()),
+                )
+                .enclose(allocator.hardline(), allocator.hardline())
+        };
+
+        let func_body = local_group.append(block_group).braces();
 
         allocator
-            .text(format!("func {}()", self.index))
+            .text(format!("func {}", self.index))
+            .append(param_group.parens())
             .append(allocator.space())
-            .append(
-                allocator
-                    .intersperse(items, allocator.hardline().append(allocator.hardline()))
-                    .indent(2)
-                    .enclose(allocator.hardline(), allocator.hardline())
-                    .braces(),
-            )
+            .append(func_body)
     }
 }
 
