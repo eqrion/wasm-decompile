@@ -25,6 +25,14 @@ func 0() {
   temp2: i32
   temp3: i32
   temp4: i32
+  temp5: i32
+  temp6: i32
+  temp7: i32
+  temp8: i32
+  temp9: i32
+  temp10: i32
+  temp11: i32
+  temp12: i32
 
   i0 = memory[404]
   i1 = memory[400] << 2
@@ -43,10 +51,14 @@ func 0() {
   temp2 = i10
   i10 = memory[i1]
   if eqz(temp2)
-     br @37
+     br @40
   br @3
 
 @3:
+  i7 = memory[i1] << 2
+  temp3 = i9
+  i9 = 0
+  i8 = temp3
   br @4
 
 @4:
@@ -54,16 +66,25 @@ func 0() {
 
 @5:
   if i9 >=_u i10
-     br @23
+     br @25
   br @6
 
 @6:
-  if bottom
+  temp4 = i12
+  i12 = i9 + i10 >>_u 1
+  temp5 = i16
+  i16 = temp4 << 2
+  temp6 = i13
+  i13 = temp5 + i16 << 1 + i7
+  i14 = memory[temp6]
+  temp7 = i11
+  i11 = i5 - i14
+  if eqz(temp7)
      br @8
   br @7
 
 @7:
-  br @16
+  br @17
 
 @8:
   if i14 <=_u 4
@@ -79,9 +100,9 @@ func 0() {
   br @11
 
 @11:
-  temp3 = i16
+  temp8 = i16
   i16 = i4
-  i18 = temp3 + i5
+  i18 = temp8 + i5
   i17 = i15
   br @12
 
@@ -89,99 +110,123 @@ func 0() {
   br @13
 
 @13:
-  temp4 = i11
+  temp9 = i11
   i11 = memory[i16] - memory[i17]
-  if temp4
-     br @15
+  if temp9
+     br @16
   br @14
 
 @14:
-  unknown
+  temp10 = i16
+  i16 = i16 + 1
+  if temp10 == i18
+     br @16
+  br @15
 
 @15:
-  br @16
+  i17 = i17 + 1
+  br @13
 
 @16:
-  if bottom
-     br @22
   br @17
 
 @17:
+  if i11 <_s 0
+     br @24
   br @18
 
 @18:
-  if bottom
-     br @21
   br @19
 
 @19:
+  if i11 >_s 0
+     br @23
   br @20
 
 @20:
-  unknown
+  br @21
 
 @21:
+  i8 = i13
+  br @22
+
+@22:
+  br @25
+
+@23:
   i9 = i12 + 1
   br @5
 
-@22:
+@24:
   i10 = i12
   br @5
 
-@23:
-  if bottom
-     br @35
-  br @24
-
-@24:
-  br @25
-
 @25:
-  if bottom
-     br @31
+  if eqz(i8)
+     br @27
   br @26
 
 @26:
-  br @27
+  br @29
 
 @27:
-  if bottom
-     br @29
+  if memory[i7] != 42
+     br @40
   br @28
 
 @28:
-  br @30
+  *(399) = 1
+  i8 = i7
+  br @29
 
 @29:
-  i3 = i2
+  temp11 = i1
+  i1 = i8
+  temp12 = i16
+  i16 = memory[temp11]
+  if temp12 & 2
+     br @36
   br @30
 
 @30:
-  unknown
+  br @31
 
 @31:
-  if i2 >_u 256
-     br @34
+  if i16 & 1
+     br @33
   br @32
 
 @32:
-  br @33
+  br @34
 
 @33:
-  br @37
+  i3 = i2
+  br @34
 
 @34:
-  return i2 + -2
+  if eqz(i4)
+     br @40
+  br @35
 
 @35:
-  if memory[i7] != 42
-     br @37
-  br @36
+  i2 = i2 + 2
+  br @2
 
 @36:
-  unknown
+  if i2 >_u 256
+     br @39
+  br @37
 
 @37:
+  br @38
+
+@38:
+  br @40
+
+@39:
+  return i2 + -2
+
+@40:
   return i3
 }
 

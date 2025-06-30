@@ -803,7 +803,6 @@ impl Builder {
         block.terminator =
             Terminator::BrIf(condition, target_block, fallthrough_block, branch_params);
 
-        self.after_unconditional_branch();
         self.current_block = fallthrough_block;
     }
 
