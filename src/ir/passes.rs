@@ -4,6 +4,22 @@ use std::collections::HashSet;
 use crate::ir::*;
 
 impl Func {
+    pub fn jump_threading(&mut self) {
+        let mut trivial_blocks = HashMap::new();
+
+        for (block_index, block) in self.blocks.iter() {
+            if let Some(target_block) = block.is_trivial_block() {
+                trivial_blocks.insert(*block_index, target_block);
+            } else {
+                trivial_blocks.insert(*block_index, *block_index);
+            }
+        }
+
+        for block in self.blocks.values_mut() {
+            block.terminator.remap_block_indices(&trivial_blocks);
+        }
+    }
+
     pub fn eliminate_dead_code(&mut self) {
         let mut stack: Vec<BlockIndex> = Vec::new();
         let mut alive: HashSet<BlockIndex> = HashSet::new();

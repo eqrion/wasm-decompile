@@ -25,6 +25,19 @@ impl Block {
     fn remap_block_indices(&mut self, mapping: &HashMap<BlockIndex, BlockIndex>) {
         self.terminator.remap_block_indices(mapping);
     }
+
+    fn is_trivial_block(&self) -> Option<BlockIndex> {
+        if self.params.is_empty() && self.statements.is_empty() {
+            if let Terminator::Br(target, values) = &self.terminator {
+                if !values.is_empty() {
+                    return None;
+                }
+                return Some(*target)
+            }
+        }
+
+        None
+    }
 }
 
 pub enum Terminator {
@@ -770,6 +783,7 @@ impl Func {
     }
 
     fn optimize(&mut self) {
+        self.jump_threading();
         self.eliminate_dead_code();
         self.renumber();
     }

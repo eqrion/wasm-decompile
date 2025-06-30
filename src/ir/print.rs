@@ -28,6 +28,7 @@ impl Block {
         for statement in &self.statements {
             instructions.push(statement.pretty(ctx, allocator));
         }
+        // Skip an empty return in the last block
         if !is_last_block || !self.terminator.is_empty_return() {
             instructions.push(self.terminator.pretty(ctx, allocator));
         }
