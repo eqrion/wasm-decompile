@@ -1,3 +1,5 @@
+1. GC support
+
 1. Improve formatting!
  - coalesce arg and locals with same type
  - omit fallthrough br instructions
@@ -10,7 +12,16 @@
   - Need predecessor information that doesn't exist yet.
   - Add a function to generate it as a side table.
   
+# Playground
+
+1. Paste wat or upload wasm
+1. One pane for the wat, optional extra pane for the disassembly
+1. Virtualize the display of the wat
+1. Click on links
+1. Query param support for loading wasm
+
 # SCF
+
 1. Critical edge splitting - Could be introduced by building. Interferes with SCF
 1. Branch param elimination?
   - Create temps and hoist them to dominating point?
