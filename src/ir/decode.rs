@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 
-
 use crate::ir::*;
 
 struct Frame {

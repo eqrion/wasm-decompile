@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 
-
 use crate::ir::*;
 
 impl Func {

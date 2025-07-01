@@ -32,7 +32,7 @@ impl Block {
                 if !values.is_empty() {
                     return None;
                 }
-                return Some(*target)
+                return Some(*target);
             }
         }
 
