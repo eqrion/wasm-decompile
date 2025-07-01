@@ -1,4 +1,4 @@
-name: Rust CI
+name: CI
 
 on:
   push:
@@ -6,17 +6,18 @@ on:
   pull_request:
     branches: [ main ]
 
+# Cancel any in-flight jobs for the same PR/branch so there's only one active
+# at a time
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
-
-    - name: Setup Rust
-      run: |
-        rustup update stable
-        rustup default stable
-        rustup component add rustfmt clippy
+    - uses: ./.github/actions/install-rust
 
     - name: Check formatting
       run: cargo fmt --all -- --check
