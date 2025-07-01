@@ -338,8 +338,7 @@ impl Builder {
         if n == 0 {
             return Vec::new();
         }
-        let mut result = Vec::new();
-        result.reserve(n);
+        let mut result = Vec::with_capacity(n);
         for _ in 0..n {
             if self.stack.is_empty() {
                 assert!(self.frame_unreachable(0));
@@ -805,7 +804,7 @@ impl Builder {
         self.current_block = fallthrough_block;
     }
 
-    fn visit_br_table_op<'a>(&mut self, br_table: wasm::BrTable<'a>) -> anyhow::Result<()> {
+    fn visit_br_table_op(&mut self, br_table: wasm::BrTable) -> anyhow::Result<()> {
         let default_target_depth = br_table.default();
         let default_target = self.branch_target_block(default_target_depth);
         let branch_params = self.pop_branch_params(default_target_depth);
@@ -844,7 +843,7 @@ impl Builder {
                 let value = self.pop();
 
                 self.stack.push(Expression::GetLocal(GetLocalExpression {
-                    local_index: local_index,
+                    local_index,
                 }));
 
                 Statement::LocalSet(LocalSetStatement {

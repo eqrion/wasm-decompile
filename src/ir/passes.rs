@@ -26,8 +26,7 @@ impl Func {
         stack.push(self.entry_block);
         alive.insert(self.entry_block);
 
-        while !stack.is_empty() {
-            let current = stack.pop().unwrap();
+        while let Some(current) = stack.pop() {
             let successors = self.blocks.get(&current).unwrap().successors();
             for successor in successors {
                 if !alive.contains(&successor) {

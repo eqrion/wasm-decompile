@@ -327,7 +327,7 @@ impl UnaryExpression {
     }
 }
 
-impl<'a> From<wasm::Operator<'a>> for UnaryExpression {
+impl From<wasm::Operator<'_>> for UnaryExpression {
     fn from(value: wasm::Operator) -> Self {
         match value {
             wasm::Operator::I32Eqz => UnaryExpression::I32Eqz,
@@ -628,7 +628,7 @@ impl BinaryExpression {
     }
 }
 
-impl<'a> From<wasm::Operator<'a>> for BinaryExpression {
+impl From<wasm::Operator<'_>> for BinaryExpression {
     fn from(value: wasm::Operator) -> Self {
         match value {
             wasm::Operator::I32Eq => BinaryExpression::I32Eq,
@@ -765,11 +765,11 @@ struct Func {
 
 impl Func {
     fn remap_block_indices(&mut self, mapping: &HashMap<BlockIndex, BlockIndex>) {
-        let old_blocks = std::mem::replace(&mut self.blocks, HashMap::new());
+        let old_blocks = std::mem::take(&mut self.blocks);
         let mut new_blocks = HashMap::new();
 
         for (block_index, mut block) in old_blocks {
-            block.remap_block_indices(&mapping);
+            block.remap_block_indices(mapping);
             new_blocks.insert(*mapping.get(&block_index).unwrap(), block);
         }
         self.blocks = new_blocks;
@@ -777,7 +777,7 @@ impl Func {
     }
 
     fn visual_block_order(&self) -> Vec<BlockIndex> {
-        let mut keys: Vec<BlockIndex> = self.blocks.keys().map(|x| *x).collect();
+        let mut keys: Vec<BlockIndex> = self.blocks.keys().copied().collect();
         keys.sort();
         keys
     }
@@ -805,7 +805,7 @@ impl Module {
             funcs: Vec::new(),
         };
 
-        for payload in parser.parse_all(&buffer) {
+        for payload in parser.parse_all(buffer) {
             match payload? {
                 // Sections for WebAssembly modules
                 wasm::Payload::Version {
@@ -906,7 +906,7 @@ impl Module {
     pub fn write(&self, mut output: impl std::io::Write) -> anyhow::Result<()> {
         self.pretty::<_, ()>(&pretty::BoxAllocator)
             .render(80, &mut output)?;
-        write!(output, "\n")?;
+        writeln!(output)?;
         Ok(())
     }
 }

@@ -493,7 +493,7 @@ impl Func {
             let visual_block_order = self.visual_block_order();
             assert!(self.entry_block == visual_block_order[0]);
             for index in &visual_block_order {
-                let block = self.blocks.get(&index).unwrap();
+                let block = self.blocks.get(index).unwrap();
                 let is_last_block = *index == visual_block_order[visual_block_order.len() - 1];
                 block_items.push(block.pretty(
                     self,
