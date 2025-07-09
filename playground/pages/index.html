@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>wasm-tools print</title>
-  <script type="module" src="print.js"></script>
+  <title>wasm-decompile</title>
+  <script type="module" src="index.js"></script>
   <link rel="stylesheet" href="style.css">
   <style>
     .textarea-container {
@@ -88,6 +88,8 @@
   </style>
 </head>
 
+<div id=""container"/>
+
 <header>
   <h1>wasm-decompile</h1>
 </header>
@@ -107,4 +109,6 @@
     <!-- adding contenteditable is the easiest way to let the user copy-paste the whole contents -->
     <pre id="output" class="iobox" contenteditable="plaintext-only" spellcheck="false"></pre>
   </div>
+</div>
+
 </div>

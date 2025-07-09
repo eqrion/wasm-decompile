@@ -12,7 +12,8 @@
   },
   "dependencies": {
     "@bytecodealliance/jco": "^1.2.4",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "react": "^19.1.0"
   },
   "devDependencies": {
     "esbuild": "0.25.5",
