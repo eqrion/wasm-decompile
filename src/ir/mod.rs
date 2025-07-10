@@ -122,6 +122,7 @@ pub struct MemoryStoreStatement {
     value: Box<Expression>,
 }
 
+#[derive(Debug, Clone)]
 pub enum Expression {
     I32Const { value: i32 },
     I64Const { value: i64 },
@@ -146,6 +147,7 @@ pub enum Expression {
     Bottom,
 }
 
+#[derive(Debug, Clone)]
 pub enum UnaryExpression {
     I32Eqz,
     I64Eqz,
@@ -162,7 +164,6 @@ pub enum UnaryExpression {
     F32Trunc,
     F32Nearest,
     F32Sqrt,
-    F32Copysign,
     F64Abs,
     F64Neg,
     F64Ceil,
@@ -170,7 +171,6 @@ pub enum UnaryExpression {
     F64Trunc,
     F64Nearest,
     F64Sqrt,
-    F64Copysign,
     I32WrapI64,
     I32TruncF32S,
     I32TruncF32U,
@@ -223,7 +223,6 @@ impl UnaryExpression {
             F32Trunc => "trunc",
             F32Nearest => "nearest",
             F32Sqrt => "sqrt",
-            F32Copysign => "copysign",
             F64Abs => "abs",
             F64Neg => "neg",
             F64Ceil => "ceil",
@@ -231,7 +230,6 @@ impl UnaryExpression {
             F64Trunc => "trunc",
             F64Nearest => "nearest",
             F64Sqrt => "sqrt",
-            F64Copysign => "copysign",
             I32WrapI64 => "wrap_i64",
             I32TruncF32S => "trunc_f32s",
             I32TruncF32U => "trunc_f32u",
@@ -284,7 +282,6 @@ impl UnaryExpression {
             F32Trunc => wasm::ValType::F32,
             F32Nearest => wasm::ValType::F32,
             F32Sqrt => wasm::ValType::F32,
-            F32Copysign => wasm::ValType::F32,
             F64Abs => wasm::ValType::F64,
             F64Neg => wasm::ValType::F64,
             F64Ceil => wasm::ValType::F64,
@@ -292,7 +289,6 @@ impl UnaryExpression {
             F64Trunc => wasm::ValType::F64,
             F64Nearest => wasm::ValType::F64,
             F64Sqrt => wasm::ValType::F64,
-            F64Copysign => wasm::ValType::F64,
             I32WrapI64 => wasm::ValType::I32,
             I32TruncF32S => wasm::ValType::I32,
             I32TruncF32U => wasm::ValType::I32,
@@ -345,7 +341,6 @@ impl From<wasm::Operator<'_>> for UnaryExpression {
             wasm::Operator::F32Trunc => UnaryExpression::F32Trunc,
             wasm::Operator::F32Nearest => UnaryExpression::F32Nearest,
             wasm::Operator::F32Sqrt => UnaryExpression::F32Sqrt,
-            wasm::Operator::F32Copysign => UnaryExpression::F32Copysign,
             wasm::Operator::F64Abs => UnaryExpression::F64Abs,
             wasm::Operator::F64Neg => UnaryExpression::F64Neg,
             wasm::Operator::F64Ceil => UnaryExpression::F64Ceil,
@@ -353,7 +348,6 @@ impl From<wasm::Operator<'_>> for UnaryExpression {
             wasm::Operator::F64Trunc => UnaryExpression::F64Trunc,
             wasm::Operator::F64Nearest => UnaryExpression::F64Nearest,
             wasm::Operator::F64Sqrt => UnaryExpression::F64Sqrt,
-            wasm::Operator::F64Copysign => UnaryExpression::F64Copysign,
             wasm::Operator::I32WrapI64 => UnaryExpression::I32WrapI64,
             wasm::Operator::I32TruncF32S => UnaryExpression::I32TruncF32S,
             wasm::Operator::I32TruncF32U => UnaryExpression::I32TruncF32U,
@@ -389,6 +383,7 @@ impl From<wasm::Operator<'_>> for UnaryExpression {
     }
 }
 
+#[derive(Debug, Clone)]
 pub enum BinaryExpression {
     I32Eq,
     I32Ne,
@@ -416,12 +411,14 @@ pub enum BinaryExpression {
     F32Gt,
     F32Le,
     F32Ge,
+    F32Copysign,
     F64Eq,
     F64Ne,
     F64Lt,
     F64Gt,
     F64Le,
     F64Ge,
+    F64Copysign,
     I32Add,
     I32Sub,
     I32Mul,
@@ -496,12 +493,14 @@ impl BinaryExpression {
             F32Gt => (">", true),
             F32Le => ("<=", true),
             F32Ge => (">=", true),
+            F32Copysign => ("copysign", false),
             F64Eq => ("==", true),
             F64Ne => ("!=", true),
             F64Lt => ("<", true),
             F64Gt => (">", true),
             F64Le => ("<=", true),
             F64Ge => (">=", true),
+            F64Copysign => ("copysign", false),
             I32Add => ("+", true),
             I32Sub => ("-", true),
             I32Mul => ("*", true),
@@ -560,28 +559,30 @@ impl BinaryExpression {
             I32LeU => wasm::ValType::I32,
             I32GeS => wasm::ValType::I32,
             I32GeU => wasm::ValType::I32,
-            I64Eq => wasm::ValType::I64,
-            I64Ne => wasm::ValType::I64,
-            I64LtS => wasm::ValType::I64,
-            I64LtU => wasm::ValType::I64,
-            I64GtS => wasm::ValType::I64,
-            I64GtU => wasm::ValType::I64,
-            I64LeS => wasm::ValType::I64,
-            I64LeU => wasm::ValType::I64,
-            I64GeS => wasm::ValType::I64,
-            I64GeU => wasm::ValType::I64,
-            F32Eq => wasm::ValType::F32,
-            F32Ne => wasm::ValType::F32,
-            F32Lt => wasm::ValType::F32,
-            F32Gt => wasm::ValType::F32,
-            F32Le => wasm::ValType::F32,
-            F32Ge => wasm::ValType::F32,
-            F64Eq => wasm::ValType::F64,
-            F64Ne => wasm::ValType::F64,
-            F64Lt => wasm::ValType::F64,
-            F64Gt => wasm::ValType::F64,
-            F64Le => wasm::ValType::F64,
-            F64Ge => wasm::ValType::F64,
+            I64Eq => wasm::ValType::I32,
+            I64Ne => wasm::ValType::I32,
+            I64LtS => wasm::ValType::I32,
+            I64LtU => wasm::ValType::I32,
+            I64GtS => wasm::ValType::I32,
+            I64GtU => wasm::ValType::I32,
+            I64LeS => wasm::ValType::I32,
+            I64LeU => wasm::ValType::I32,
+            I64GeS => wasm::ValType::I32,
+            I64GeU => wasm::ValType::I32,
+            F32Eq => wasm::ValType::I32,
+            F32Ne => wasm::ValType::I32,
+            F32Lt => wasm::ValType::I32,
+            F32Gt => wasm::ValType::I32,
+            F32Le => wasm::ValType::I32,
+            F32Ge => wasm::ValType::I32,
+            F32Copysign => wasm::ValType::F32,
+            F64Eq => wasm::ValType::I32,
+            F64Ne => wasm::ValType::I32,
+            F64Lt => wasm::ValType::I32,
+            F64Gt => wasm::ValType::I32,
+            F64Le => wasm::ValType::I32,
+            F64Ge => wasm::ValType::I32,
+            F64Copysign => wasm::ValType::F64,
             I32Add => wasm::ValType::I32,
             I32Sub => wasm::ValType::I32,
             I32Mul => wasm::ValType::I32,
@@ -657,12 +658,14 @@ impl From<wasm::Operator<'_>> for BinaryExpression {
             wasm::Operator::F32Gt => BinaryExpression::F32Gt,
             wasm::Operator::F32Le => BinaryExpression::F32Le,
             wasm::Operator::F32Ge => BinaryExpression::F32Ge,
+            wasm::Operator::F32Copysign => BinaryExpression::F32Copysign,
             wasm::Operator::F64Eq => BinaryExpression::F64Eq,
             wasm::Operator::F64Ne => BinaryExpression::F64Ne,
             wasm::Operator::F64Lt => BinaryExpression::F64Lt,
             wasm::Operator::F64Gt => BinaryExpression::F64Gt,
             wasm::Operator::F64Le => BinaryExpression::F64Le,
             wasm::Operator::F64Ge => BinaryExpression::F64Ge,
+            wasm::Operator::F64Copysign => BinaryExpression::F64Copysign,
             wasm::Operator::I32Add => BinaryExpression::I32Add,
             wasm::Operator::I32Sub => BinaryExpression::I32Sub,
             wasm::Operator::I32Mul => BinaryExpression::I32Mul,
@@ -710,11 +713,13 @@ impl From<wasm::Operator<'_>> for BinaryExpression {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct CallExpression {
     func_index: u32,
     params: Vec<Expression>,
 }
 
+#[derive(Debug, Clone)]
 pub struct CallIndirectExpression {
     func_type_index: u32,
     _table_index: u32,
@@ -722,29 +727,97 @@ pub struct CallIndirectExpression {
     params: Vec<Expression>,
 }
 
+#[derive(Debug, Clone)]
 pub struct GetLocalExpression {
     local_index: u32,
 }
 
+#[derive(Debug, Clone)]
 pub struct GetLocalNExpression {
     local_indices: Vec<u32>,
 }
 
+#[derive(Debug, Clone)]
 pub struct GetGlobalExpression {
     global_index: u32,
 }
 
+#[derive(Debug, Clone)]
 pub struct SelectExpression {
     condition: Box<Expression>,
     on_true: Box<Expression>,
     on_false: Box<Expression>,
 }
 
+#[derive(Debug, Clone, Copy)]
+enum MemoryLoadKind {
+    I32Load,
+    I32Load8S,
+    I32Load8U,
+    I32Load16S,
+    I32Load16U,
+    I64Load,
+    I64Load8S,
+    I64Load8U,
+    I64Load16S,
+    I64Load16U,
+    I64Load32S,
+    I64Load32U,
+    F32Load,
+    F64Load,
+}
+
+impl From<wasm::Operator<'_>> for MemoryLoadKind {
+    fn from(op: wasm::Operator<'_>) -> Self {
+        match op {
+            wasm::Operator::I32Load { .. } => MemoryLoadKind::I32Load,
+            wasm::Operator::I32Load8S { .. } => MemoryLoadKind::I32Load8S,
+            wasm::Operator::I32Load8U { .. } => MemoryLoadKind::I32Load8U,
+            wasm::Operator::I32Load16S { .. } => MemoryLoadKind::I32Load16S,
+            wasm::Operator::I32Load16U { .. } => MemoryLoadKind::I32Load16U,
+            wasm::Operator::I64Load { .. } => MemoryLoadKind::I64Load,
+            wasm::Operator::I64Load8S { .. } => MemoryLoadKind::I64Load8S,
+            wasm::Operator::I64Load8U { .. } => MemoryLoadKind::I64Load8U,
+            wasm::Operator::I64Load16S { .. } => MemoryLoadKind::I64Load16S,
+            wasm::Operator::I64Load16U { .. } => MemoryLoadKind::I64Load16U,
+            wasm::Operator::I64Load32S { .. } => MemoryLoadKind::I64Load32S,
+            wasm::Operator::I64Load32U { .. } => MemoryLoadKind::I64Load32U,
+            wasm::Operator::F32Load { .. } => MemoryLoadKind::F32Load,
+            wasm::Operator::F64Load { .. } => MemoryLoadKind::F64Load,
+            _ => unreachable!(),
+        }
+    }
+}
+
+impl MemoryLoadKind {
+    fn result_type(&self) -> wasmparser::ValType {
+        match *self {
+            MemoryLoadKind::I32Load |
+            MemoryLoadKind::I32Load8S |
+            MemoryLoadKind::I32Load8U |
+            MemoryLoadKind::I32Load16S |
+            MemoryLoadKind::I32Load16U => wasmparser::ValType::I32,
+            MemoryLoadKind::I64Load |
+            MemoryLoadKind::I64Load8S |
+            MemoryLoadKind::I64Load8U |
+            MemoryLoadKind::I64Load16S |
+            MemoryLoadKind::I64Load16U |
+            MemoryLoadKind::I64Load32S |
+            MemoryLoadKind::I64Load32U => wasmparser::ValType::I64,
+            MemoryLoadKind::F32Load => wasmparser::ValType::F32,
+            MemoryLoadKind::F64Load  => wasmparser::ValType::F64,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct MemoryLoadExpression {
+    kind: MemoryLoadKind,
     _arg: wasm::MemArg,
     index: Box<Expression>,
 }
 
+#[derive(Debug, Clone)]
 pub struct MemoryGrowExpression {
     value: Box<Expression>,
 }

@@ -1,0 +1,16 @@
+module {
+
+func 0() {
+  if 0
+     br @2 with (0)
+  br @1 with (0)
+
+@1(b0: f32):
+  return b0
+
+@2(b0: f32):
+  return b0
+}
+
+}
+

@@ -1,0 +1,20 @@
+module {
+
+func 0() {
+  temp0: f32
+  temp1: f32
+
+  temp0 = 0
+  br @1
+
+@1:
+  if bottom
+     br @2
+  br @2
+
+@2:
+  unknown
+}
+
+}
+

@@ -1,0 +1,16 @@
+module {
+
+func 0() {
+  f0: f64
+  temp0: f64
+  temp1: f64
+
+  temp0 = f0
+  br @1
+
+@1:
+  unreachable
+}
+
+}
+

@@ -1,0 +1,14 @@
+module {
+
+func 0() {
+  temp0: f32
+
+  temp0 = 0
+  br @1
+
+@1:
+  return temp0
+}
+
+}
+

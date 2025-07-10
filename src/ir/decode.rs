@@ -2,6 +2,7 @@ use std::collections::HashMap;
 
 use crate::ir::*;
 
+#[derive(Debug)]
 struct Frame {
     kind: FrameKind,
     blockty: wasm::BlockType,
@@ -9,6 +10,7 @@ struct Frame {
     stack_height: usize,
 }
 
+#[derive(Debug)]
 enum FrameKind {
     Func,
     Block {
@@ -191,9 +193,8 @@ impl Builder {
                 vec![wasm::ValType::I32]
             }
             Expression::MemoryGrow(_) => vec![wasm::ValType::I32],
-            Expression::MemoryLoad(MemoryLoadExpression { _arg, .. }) => {
-                // TODO
-                vec![wasm::ValType::I32]
+            Expression::MemoryLoad(MemoryLoadExpression { kind, .. }) => {
+                vec![kind.result_type()]
             }
             Expression::Unary(op, _) => vec![op.result_type()],
             Expression::Binary(op, _, _) => vec![op.result_type()],
@@ -326,7 +327,9 @@ impl Builder {
     }
 
     fn pop(&mut self) -> Expression {
-        if self.stack.is_empty() {
+        let frame = self.frame_at(0);
+        assert!(self.stack.len() >= frame.stack_height);
+        if self.stack.len() == frame.stack_height {
             assert!(self.frame_unreachable(0));
             Expression::Bottom
         } else {
@@ -340,8 +343,10 @@ impl Builder {
         }
         let mut result = Vec::with_capacity(n);
         for _ in 0..n {
-            if self.stack.is_empty() {
-                assert!(self.frame_unreachable(0));
+            let frame = self.frame_at(0);
+            assert!(self.stack.len() >= frame.stack_height);
+            if self.stack.len() == frame.stack_height {
+                assert!(frame.unreachable);
                 result.push(Expression::Bottom);
             } else {
                 result.push(self.stack.pop().unwrap());
@@ -401,6 +406,91 @@ impl Builder {
         self.sync_stack_before_statement();
         self.push_block_params(block_params);
         results
+    }
+
+    fn dump_state(&self, op: wasm::Operator) {
+        let mut operands = Vec::new();
+        for i in 0..self.validator.operand_stack_height() {
+            operands.push(self.validator.get_operand_type(i as usize).unwrap());
+        }
+        operands.reverse();
+
+        let mut frames = Vec::new();
+        for i in 0..self.validator.control_stack_height() {
+            frames.push(self.validator.get_control_frame(i as usize).unwrap());
+        }
+        frames.reverse();
+
+        println!("{:?}", op);
+        println!("\tour-stack = {:?}", self.stack);
+        println!("\tvalidator-stack={:?}", operands);
+        println!();
+        println!("\tour-frames = {:?}", self.frames);
+        println!("\tvalidator-frames = {:?}", frames);
+        println!();
+    }
+
+    fn check_invariants(&self) {
+        // Our internal state is allowed to diverge from wasmparser when we're
+        // in unreachable code.
+        for frame in &self.frames {
+            if frame.unreachable {
+                return;
+            }
+        }
+
+        assert_eq!(
+            self.frames.len(),
+            self.validator.control_stack_height() as usize,
+            "decoder and validator control stack height mismatch"
+        );
+        for i in 0..self.validator.control_stack_height() {
+            if let Some(validator_frame) = self.validator.get_control_frame(i as usize) {
+                let frame = self.frame_at(i);
+                assert_eq!(
+                    frame.unreachable, validator_frame.unreachable,
+                    "decoder and validator control frame unreachable mismatch"
+                );
+                assert_eq!(
+                    frame.stack_height, validator_frame.height,
+                    "decoder and validator control frame stack height mismatch"
+                );
+                assert_eq!(
+                    frame.blockty, validator_frame.block_type,
+                    "decoder and validator block type mismatch"
+                );
+            }
+        }
+
+        if !self.frames.is_empty() {
+            assert_eq!(
+                self.stack.len(),
+                self.validator.operand_stack_height() as usize,
+                "decoder and validator operand stack height mismatch"
+            );
+            for i in 0..self.validator.operand_stack_height() {
+                let our_expression = &self.stack[self.stack.len() - i as usize - 1];
+
+                match self.validator.get_operand_type(i as usize) {
+                    None => continue,
+                    Some(None) => assert!(
+                        matches!(our_expression, Expression::Bottom),
+                        "decoder and validator type mismatch at depth {i}"
+                    ),
+                    Some(Some(validator_ty)) => {
+                        let our_ty = self.expr_type(&our_expression, &self.blocks[&self.current_block]);
+                        assert!(
+                            our_ty.len() == 1,
+                            "decoder and validator type mismatch at depth {i}"
+                        );
+                        assert_eq!(
+                            our_ty[0], validator_ty,
+                            "decoder and validator type mismatch at depth {i}"
+                        );
+                    }
+                }
+            }
+        }
     }
 
     fn visit_op(
@@ -605,11 +695,10 @@ impl Builder {
     }
 
     fn visit_else_op(&mut self) {
-        let frame = self.pop_frame();
-
+        // Read state from the `if` frame before it is popped
+        let frame = self.frame_at(0);
         let block_params_count = self.blockty_params(frame.blockty).len();
         let block_results_count = self.blockty_results(frame.blockty).len();
-
         let (true_block, false_block, join_block) = match frame.kind {
             FrameKind::If {
                 true_block,
@@ -619,6 +708,21 @@ impl Builder {
             } => (true_block, false_block, join_block),
             _ => unreachable!(),
         };
+
+        // Pop this block's results and pass them to the join block.
+        let results = self.popn(block_results_count);
+        let frame = self.pop_frame();
+
+        // Reset the value stack to the height it was at the start of the if block.
+        if frame.unreachable {
+            self.stack.truncate(frame.stack_height);
+        } else {
+            assert!(self.stack.len() == frame.stack_height);
+        }
+        // Re-push this block's params.
+        self.push_block_params(block_params_count);
+
+        // Push a new frame for the `else` block
         self.push_frame(Frame {
             kind: FrameKind::Else {
                 _true_block: true_block,
@@ -630,17 +734,6 @@ impl Builder {
             blockty: frame.blockty,
         });
 
-        // Pop this block's results and pass them to the join block.
-        let results = self.popn(block_results_count);
-        // Reset the value stack to the height it was at the start of the if block.
-        if frame.unreachable {
-            self.stack.truncate(frame.stack_height);
-        } else {
-            assert!(self.stack.len() == frame.stack_height);
-        }
-        // Re-push this block's params.
-        self.push_block_params(block_params_count);
-
         // Terminate the true block with br(join) and then move to the 'false_block'
         let current_block_ref = self.blocks.get_mut(&self.current_block).unwrap();
         current_block_ref.terminator = Terminator::Br(join_block, results);
@@ -648,14 +741,22 @@ impl Builder {
     }
 
     fn visit_end_op(&mut self, current_offset: usize) -> anyhow::Result<()> {
-        let frame = self.pop_frame();
-        let block_results_count = self.blockty_results(frame.blockty).len();
+        let block_results_count = self.blockty_results(self.frame_at(0).blockty).len();
         let results = self.popn(block_results_count);
+        // Pop the frame after popping the results, in case the frame was unreachable
+        let frame = self.pop_frame();
+
         // Reset the value stack to the height it was at the start of the block.
         if frame.unreachable {
             self.stack.truncate(frame.stack_height);
         } else {
-            assert!(self.stack.len() == frame.stack_height);
+            assert_eq!(
+                self.stack.len(),
+                frame.stack_height,
+                "mismatched stack at 0x{:x}: {:?}",
+                current_offset,
+                frame
+            );
         }
 
         match frame.kind {
@@ -663,7 +764,7 @@ impl Builder {
                 // Terminate the function with a return
                 let current_block_ref = self.blocks.get_mut(&self.current_block).unwrap();
                 if !frame.unreachable {
-                    current_block_ref.terminator = Terminator::Return(results);
+                    current_block_ref.terminator = Terminator::Return(results.clone());
                 } else {
                     // TODO
                     // assert!(current_block_ref.terminator != Terminator::Unknown);
@@ -778,6 +879,7 @@ impl Builder {
     fn visit_br_if_op(&mut self, relative_depth: u32) {
         let condition = self.pop();
         let branch_params = self.pop_branch_params(relative_depth);
+        let branch_params_len = branch_params.len();
         self.sync_stack_before_statement();
 
         let target_frame = self.frame_at(relative_depth);
@@ -802,6 +904,7 @@ impl Builder {
             Terminator::BrIf(condition, target_block, fallthrough_block, branch_params);
 
         self.current_block = fallthrough_block;
+        self.push_block_params(branch_params_len);
     }
 
     fn visit_br_table_op(&mut self, br_table: wasm::BrTable) -> anyhow::Result<()> {
@@ -842,9 +945,8 @@ impl Builder {
             wasm::Operator::LocalTee { local_index } => {
                 let value = self.pop();
 
-                self.stack.push(Expression::GetLocal(GetLocalExpression {
-                    local_index,
-                }));
+                self.stack
+                    .push(Expression::GetLocal(GetLocalExpression { local_index }));
 
                 Statement::LocalSet(LocalSetStatement {
                     index: local_index,
@@ -865,6 +967,7 @@ impl Builder {
             | wasm::Operator::I64Store { memarg }
             | wasm::Operator::I64Store32 { memarg }
             | wasm::Operator::I64Store16 { memarg }
+            | wasm::Operator::I64Store8 { memarg }
             | wasm::Operator::F32Store { memarg }
             | wasm::Operator::F64Store { memarg } => {
                 let value = self.pop();
@@ -982,11 +1085,14 @@ impl Builder {
             | wasm::Operator::I64Load16S { memarg }
             | wasm::Operator::I64Load16U { memarg }
             | wasm::Operator::I64Load32S { memarg }
-            | wasm::Operator::I64Load32U { memarg } => {
+            | wasm::Operator::I64Load32U { memarg }
+            | wasm::Operator::F32Load { memarg }
+            | wasm::Operator::F64Load { memarg } => {
                 let index = self.pop();
                 self.stack
                     .push(Expression::MemoryLoad(MemoryLoadExpression {
                         _arg: memarg,
+                        kind: op.into(),
                         index: Box::new(index),
                     }));
             }
@@ -1017,7 +1123,6 @@ impl Builder {
             | wasm::Operator::F32Trunc
             | wasm::Operator::F32Nearest
             | wasm::Operator::F32Sqrt
-            | wasm::Operator::F32Copysign
             | wasm::Operator::F64Abs
             | wasm::Operator::F64Neg
             | wasm::Operator::F64Ceil
@@ -1025,7 +1130,6 @@ impl Builder {
             | wasm::Operator::F64Trunc
             | wasm::Operator::F64Nearest
             | wasm::Operator::F64Sqrt
-            | wasm::Operator::F64Copysign
             | wasm::Operator::I32WrapI64
             | wasm::Operator::I32TruncF32S
             | wasm::Operator::I32TruncF32U
@@ -1087,12 +1191,14 @@ impl Builder {
             | wasm::Operator::F32Gt
             | wasm::Operator::F32Le
             | wasm::Operator::F32Ge
+            | wasm::Operator::F32Copysign
             | wasm::Operator::F64Eq
             | wasm::Operator::F64Ne
             | wasm::Operator::F64Lt
             | wasm::Operator::F64Gt
             | wasm::Operator::F64Le
             | wasm::Operator::F64Ge
+            | wasm::Operator::F64Copysign
             | wasm::Operator::I32Add
             | wasm::Operator::I32Sub
             | wasm::Operator::I32Mul
@@ -1186,7 +1292,9 @@ impl Func {
         let mut operator_reader = body.get_operators_reader()?;
         while !operator_reader.eof() {
             let (op, offset) = operator_reader.read_with_offset()?;
-            builder.visit_op(offset, operator_reader.original_position(), op)?;
+            builder.visit_op(offset, operator_reader.original_position(), op.clone())?;
+            // builder.dump_state(op);
+            builder.check_invariants();
         }
         operator_reader.ensure_end()?;
 

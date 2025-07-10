@@ -14,11 +14,11 @@
   
 # Playground
 
-1. Paste wat or upload wasm
 1. One pane for the wat, optional extra pane for the disassembly
-1. Virtualize the display of the wat
-1. Click on links
-1. Query param support for loading wasm
+1. Virtualize the display of the wat with query params
+1. Click on links to navigate
+
+1. Paste wat support
 
 # SCF
 

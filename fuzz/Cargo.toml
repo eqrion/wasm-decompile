@@ -1,0 +1,24 @@
+[package]
+name = "wasm-decompile-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+wasm-smith = "0.235.0"
+wasmprinter = "0.235.0"
+arbitrary = "1.4.1"
+
+[dependencies.wasm-decompile]
+path = ".."
+
+[[bin]]
+name = "decompile"
+path = "fuzz_targets/decompile.rs"
+test = false
+doc = false
+bench = false

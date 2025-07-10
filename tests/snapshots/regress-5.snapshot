@@ -1,0 +1,23 @@
+module {
+
+func 0() {
+  temp0: f64
+  temp1: f64
+  temp2: f64
+  temp3: i32
+
+  br @1
+
+@1:
+  temp0 = 0
+  temp1 = 0
+  temp2 = 0
+  temp3 = 32767 ?0 <= 0:eqz(trunc_f64s(0))
+  br @2
+
+@2:
+  unreachable
+}
+
+}
+
