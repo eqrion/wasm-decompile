@@ -5,9 +5,6 @@ func 0() {
 }
 
 func 1() {
-  br @1
-
-@1:
   unreachable
 }
 

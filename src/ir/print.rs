@@ -192,6 +192,7 @@ impl Statement {
             Statement::LocalSetN(stmt) => stmt.pretty(ctx, allocator),
             Statement::GlobalSet(stmt) => stmt.pretty(ctx, allocator),
             Statement::MemoryStore(stmt) => stmt.pretty(ctx, allocator),
+            Statement::If(stmt) => stmt.pretty(ctx, allocator),
             Statement::Call(expr) => expr.pretty(ctx, allocator),
             Statement::CallIndirect(expr) => expr.pretty(ctx, allocator),
         }
@@ -263,6 +264,48 @@ impl MemoryStoreStatement {
             .append(allocator.text("="))
             .append(allocator.space())
             .append(self.value.pretty(ctx, allocator))
+    }
+}
+
+impl IfStatement {
+    fn pretty<'b, D, A>(&'b self, ctx: Ctx<'b>, allocator: &'b D) -> DocBuilder<'b, D, A>
+    where
+        D: DocAllocator<'b, A>,
+        D::Doc: Clone,
+        A: Clone,
+    {
+        allocator
+            .text("if")
+            .append(allocator.space())
+            .append(self.condition.pretty(ctx, allocator).parens())
+            .append(allocator.space())
+            .append(
+                allocator
+                    .intersperse(
+                        self.true_statements
+                            .iter()
+                            .map(|x| x.pretty(ctx, allocator)),
+                        allocator.hardline(),
+                    )
+                    .indent(2)
+                    .enclose(allocator.hardline(), allocator.hardline())
+                    .braces(),
+            )
+            .append(allocator.space())
+            .append(allocator.text("else"))
+            .append(allocator.space())
+            .append(
+                allocator
+                    .intersperse(
+                        self.false_statements
+                            .iter()
+                            .map(|x| x.pretty(ctx, allocator)),
+                        allocator.hardline(),
+                    )
+                    .indent(2)
+                    .enclose(allocator.hardline(), allocator.hardline())
+                    .braces(),
+            )
     }
 }
 

@@ -11,6 +11,7 @@ mod print;
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Hash)]
 pub struct BlockIndex(u32);
 
+#[derive(Debug, Clone)]
 pub struct Block {
     params: Vec<wasm::ValType>,
     statements: Vec<Statement>,
@@ -40,6 +41,7 @@ impl Block {
     }
 }
 
+#[derive(Debug, Clone)]
 pub enum Terminator {
     Unknown,
     Unreachable,
@@ -90,6 +92,7 @@ impl Terminator {
     }
 }
 
+#[derive(Debug, Clone)]
 enum Statement {
     Nop,
     Drop(Expression),
@@ -97,29 +100,41 @@ enum Statement {
     LocalSetN(LocalSetNStatement),
     GlobalSet(GlobalSetStatement),
     MemoryStore(MemoryStoreStatement),
+    If(IfStatement),
     Call(CallExpression),
     CallIndirect(CallIndirectExpression),
 }
 
+#[derive(Debug, Clone)]
 pub struct LocalSetStatement {
     index: u32,
     value: Box<Expression>,
 }
 
+#[derive(Debug, Clone)]
 pub struct LocalSetNStatement {
     index: Vec<u32>,
     value: Box<Expression>,
 }
 
+#[derive(Debug, Clone)]
 pub struct GlobalSetStatement {
     index: u32,
     value: Box<Expression>,
 }
 
+#[derive(Debug, Clone)]
 pub struct MemoryStoreStatement {
     _arg: wasm::MemArg,
     index: Box<Expression>,
     value: Box<Expression>,
+}
+
+#[derive(Debug, Clone)]
+pub struct IfStatement {
+    condition: Box<Expression>,
+    true_statements: Vec<Statement>,
+    false_statements: Vec<Statement>,
 }
 
 #[derive(Debug, Clone)]
@@ -792,20 +807,20 @@ impl From<wasm::Operator<'_>> for MemoryLoadKind {
 impl MemoryLoadKind {
     fn result_type(&self) -> wasmparser::ValType {
         match *self {
-            MemoryLoadKind::I32Load |
-            MemoryLoadKind::I32Load8S |
-            MemoryLoadKind::I32Load8U |
-            MemoryLoadKind::I32Load16S |
-            MemoryLoadKind::I32Load16U => wasmparser::ValType::I32,
-            MemoryLoadKind::I64Load |
-            MemoryLoadKind::I64Load8S |
-            MemoryLoadKind::I64Load8U |
-            MemoryLoadKind::I64Load16S |
-            MemoryLoadKind::I64Load16U |
-            MemoryLoadKind::I64Load32S |
-            MemoryLoadKind::I64Load32U => wasmparser::ValType::I64,
+            MemoryLoadKind::I32Load
+            | MemoryLoadKind::I32Load8S
+            | MemoryLoadKind::I32Load8U
+            | MemoryLoadKind::I32Load16S
+            | MemoryLoadKind::I32Load16U => wasmparser::ValType::I32,
+            MemoryLoadKind::I64Load
+            | MemoryLoadKind::I64Load8S
+            | MemoryLoadKind::I64Load8U
+            | MemoryLoadKind::I64Load16S
+            | MemoryLoadKind::I64Load16U
+            | MemoryLoadKind::I64Load32S
+            | MemoryLoadKind::I64Load32U => wasmparser::ValType::I64,
             MemoryLoadKind::F32Load => wasmparser::ValType::F32,
-            MemoryLoadKind::F64Load  => wasmparser::ValType::F64,
+            MemoryLoadKind::F64Load => wasmparser::ValType::F64,
         }
     }
 }
@@ -856,7 +871,8 @@ impl Func {
     }
 
     fn optimize(&mut self) {
-        self.jump_threading();
+        // self.jump_threading();
+        self.reconstruct_control_flow();
         self.eliminate_dead_code();
         self.renumber();
     }

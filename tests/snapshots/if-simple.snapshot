@@ -1,0 +1,15 @@
+module {
+
+func 0() {
+  i0: i32
+
+  if (1) {
+    i0 = 1 + 2
+  } else {
+    i0 = 3 + 4
+  }
+  return i0
+}
+
+}
+
