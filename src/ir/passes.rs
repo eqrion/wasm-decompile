@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 
-use pretty::block;
 
 use crate::ir::*;
 
@@ -48,7 +47,7 @@ impl Func {
             assert_eq!(predecessor_successors[0], block_index);
 
             let block = self.blocks.get_mut(&block_index).unwrap();
-            if block.params.len() != 0 {
+            if !block.params.is_empty() {
                 // TODO: don't handle params yet
                 continue;
             }
@@ -86,7 +85,7 @@ impl Func {
 
             match &block_a.terminator {
                 Terminator::BrIf(condition, index_b, index_c, params) => {
-                    if params.len() != 0 {
+                    if !params.is_empty() {
                         continue;
                     }
 
@@ -106,8 +105,8 @@ impl Func {
                         continue;
                     }
 
-                    let successor_b = successors_b.get(0);
-                    let successor_c = successors_c.get(0);
+                    let successor_b = successors_b.first();
+                    let successor_c = successors_c.first();
 
                     let index_d = match (successor_b, successor_c) {
                         (Some(x), Some(y)) if *x == *y => Some(*x),
@@ -119,7 +118,7 @@ impl Func {
 
                     if let Some(index_d) = index_d {
                         let block_d = &self.blocks[&index_d];
-                        if block_d.params.len() != 0 {
+                        if !block_d.params.is_empty() {
                             continue;
                         }
                         let predecessors_d = &predecessor_map[&index_d];

@@ -479,7 +479,7 @@ impl Builder {
                     ),
                     Some(Some(validator_ty)) => {
                         let our_ty =
-                            self.expr_type(&our_expression, &self.blocks[&self.current_block]);
+                            self.expr_type(our_expression, &self.blocks[&self.current_block]);
                         assert!(
                             our_ty.len() == 1,
                             "decoder and validator type mismatch at depth {i}"
