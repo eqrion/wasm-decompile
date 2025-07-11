@@ -408,6 +408,7 @@ impl Builder {
         results
     }
 
+    #[allow(unused)]
     fn dump_state(&self, op: wasm::Operator) {
         let mut operands = Vec::new();
         for i in 0..self.validator.operand_stack_height() {

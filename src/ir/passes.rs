@@ -1,6 +1,5 @@
 use std::collections::HashSet;
 
-
 use crate::ir::*;
 
 impl Func {
@@ -133,13 +132,13 @@ impl Func {
                     changed = true;
 
                     let statements_b = block_b.statements.clone();
-                    let terminator_b = block_b.terminator.clone();
+                    let _terminator_b = block_b.terminator.clone();
                     // TODO: add some terminators as statements
                     // match terminator_b {
                     //     Terminator::Return()
                     // }
                     let statements_c = block_c.statements.clone();
-                    let terminator_c = block_c.terminator.clone();
+                    let _terminator_c = block_c.terminator.clone();
 
                     let if_statement = IfStatement {
                         condition: Box::new(condition.clone()),

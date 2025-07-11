@@ -871,8 +871,8 @@ impl Func {
     }
 
     fn optimize(&mut self) {
-        // self.jump_threading();
         self.reconstruct_control_flow();
+        self.jump_threading();
         self.eliminate_dead_code();
         self.renumber();
     }
