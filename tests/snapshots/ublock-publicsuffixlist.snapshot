@@ -48,7 +48,7 @@ func 0() {
   temp2 = i10
   i10 = memory[i1]
   if eqz(temp2)
-     br @24
+     br @21
   br @2
 
 @2:
@@ -60,7 +60,7 @@ func 0() {
 
 @3:
   if i9 >=_u i10
-     br @16
+     br @14
   br @4
 
 @4:
@@ -74,13 +74,10 @@ func 0() {
   temp7 = i11
   i11 = i5 - i14
   if eqz(temp7)
-     br @6
-  br @5
+     br @5
+  br @9
 
 @5:
-  br @11
-
-@6:
   if (i14 <=_u 4) {
     i15 = i13 + 4
   } else {
@@ -90,101 +87,95 @@ func 0() {
   i16 = i4
   i18 = temp8 + i5
   i17 = i15
-  br @7
+  br @6
 
-@7:
+@6:
   temp9 = i11
   i11 = memory[i16] - memory[i17]
   if temp9
-     br @10
-  br @8
+     br @9
+  br @7
 
-@8:
+@7:
   temp10 = i16
   i16 = i16 + 1
   if temp10 == i18
-     br @10
-  br @9
+     br @9
+  br @8
+
+@8:
+  i17 = i17 + 1
+  br @6
 
 @9:
-  i17 = i17 + 1
-  br @7
+  if i11 <_s 0
+     br @13
+  br @10
 
 @10:
+  if i11 >_s 0
+     br @12
   br @11
 
 @11:
-  if i11 <_s 0
-     br @15
-  br @12
+  i8 = i13
+  br @14
 
 @12:
-  if i11 >_s 0
-     br @14
-  br @13
-
-@13:
-  i8 = i13
-  br @16
-
-@14:
   i9 = i12 + 1
   br @3
 
-@15:
+@13:
   i10 = i12
   br @3
 
-@16:
+@14:
   if eqz(i8)
-     br @18
+     br @15
+  br @17
+
+@15:
+  if memory[i7] != 42
+     br @21
+  br @16
+
+@16:
+  *(399) = 1
+  i8 = i7
   br @17
 
 @17:
-  br @20
-
-@18:
-  if memory[i7] != 42
-     br @24
-  br @19
-
-@19:
-  *(399) = 1
-  i8 = i7
-  br @20
-
-@20:
   temp11 = i1
   i1 = i8
   temp12 = i16
   i16 = memory[temp11]
   if temp12 & 2
-     br @23
-  br @21
+     br @20
+  br @18
 
-@21:
+@18:
   if (i16 & 1) {
     i3 = i2
   } else {
     
   }
   if eqz(i4)
-     br @24
-  br @22
+     br @21
+  br @19
 
-@22:
+@19:
   i2 = i2 + 2
   br @1
 
-@23:
+@20:
   if (i2 >_u 256) {
     
   } else {
     
   }
-  br @24
+  br @21
 
-@24:
+@21:
   return i3
 }
 
