@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::hash::Hash;
 
+use anyhow::bail;
 use pretty::{DocAllocator, DocBuilder};
 use wasmparser::{self as wasm, FuncValidatorAllocations, WasmModuleResources};
 
@@ -881,6 +882,7 @@ impl Func {
 pub struct Module {
     rec_groups: Vec<wasm::RecGroup>,
     types_of_funcs: Vec<u32>,
+    num_func_imports: u32,
     funcs: Vec<Func>,
 }
 
@@ -891,6 +893,7 @@ impl Module {
         let mut result = Self {
             rec_groups: Vec::new(),
             types_of_funcs: Vec::new(),
+            num_func_imports: 0,
             funcs: Vec::new(),
         };
 
@@ -912,6 +915,7 @@ impl Module {
                 }
                 wasm::Payload::ImportSection(section) => {
                     validator.import_section(&section)?;
+                    result.num_func_imports = validator.types(0).unwrap().function_count();
                 }
                 wasm::Payload::FunctionSection(section) => {
                     validator.function_section(&section)?;
@@ -994,6 +998,25 @@ impl Module {
 
     pub fn write(&self, mut output: impl std::io::Write) -> anyhow::Result<()> {
         self.pretty::<_, ()>(&pretty::BoxAllocator)
+            .render(80, &mut output)?;
+        writeln!(output)?;
+        Ok(())
+    }
+
+    pub fn write_func(
+        &self,
+        func_index: u32,
+        mut output: impl std::io::Write,
+    ) -> anyhow::Result<()> {
+        if func_index < self.num_func_imports {
+            bail!("cannot decompile an imported function");
+        }
+        let def_func_index = (func_index - self.num_func_imports) as usize;
+        if def_func_index >= self.funcs.len() {
+            bail!("too large of a function index");
+        }
+        self.funcs[def_func_index]
+            .pretty::<_, ()>(&pretty::BoxAllocator)
             .render(80, &mut output)?;
         writeln!(output)?;
         Ok(())

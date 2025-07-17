@@ -9,6 +9,8 @@ pub use ir::*;
 struct Cli {
     input: PathBuf,
     output: Option<PathBuf>,
+    #[clap(short = 'f')]
+    func_index: Option<u32>,
 }
 
 fn main() -> anyhow::Result<()> {
@@ -19,9 +21,18 @@ fn main() -> anyhow::Result<()> {
 
     if let Some(output) = cli.output {
         let output = std::fs::File::create(&output)?;
-        module.write(output)?;
+        if let Some(func_index) = cli.func_index {
+            module.write_func(func_index, output)?;
+        } else {
+            module.write(output)?;
+        }
     } else {
-        module.write(std::io::stdout())?;
+        let output = std::io::stdout();
+        if let Some(func_index) = cli.func_index {
+            module.write_func(func_index, output)?;
+        } else {
+            module.write(output)?;
+        }
     }
     Ok(())
 }
