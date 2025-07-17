@@ -9,20 +9,22 @@ use wasm_decompile::Module as DecompileModule;
 fuzz_target!(|bytes: Vec<u8>| {
     let mut u = Unstructured::new(&bytes);
     let config = wasm_smith::Config {
+        reference_types_enabled: false,
         gc_enabled: false,
         exceptions_enabled: false,
-        memory64_enabled: false,
+
         multi_value_enabled: false,
-        reference_types_enabled: false,
+        bulk_memory_enabled: false,
+        memory64_enabled: false,
         relaxed_simd_enabled: false,
         simd_enabled: false,
         tail_call_enabled: false,
         threads_enabled: false,
         wide_arithmetic_enabled: false,
         custom_page_sizes_enabled: false,
-        saturating_float_to_int_enabled: false,
-        sign_extension_ops_enabled: false,
-        bulk_memory_enabled: false,
+
+        saturating_float_to_int_enabled: true,
+        sign_extension_ops_enabled: true,
         min_funcs: 1,
         max_imports: 0,
         ..wasm_smith::Config::default()

@@ -218,6 +218,14 @@ pub enum UnaryExpression {
     I64Extend8S,
     I64Extend16S,
     I64Extend32S,
+    I32TruncSatF32S,
+    I32TruncSatF32U,
+    I32TruncSatF64S,
+    I32TruncSatF64U,
+    I64TruncSatF32S,
+    I64TruncSatF32U,
+    I64TruncSatF64S,
+    I64TruncSatF64U,
 }
 
 impl UnaryExpression {
@@ -277,6 +285,14 @@ impl UnaryExpression {
             I64Extend8S => "extend8s",
             I64Extend16S => "extend16s",
             I64Extend32S => "extend32s",
+            I32TruncSatF32S => "trunc_sat_f32_s",
+            I32TruncSatF32U => "trunc_sat_f32_u",
+            I32TruncSatF64S => "trunc_sat_f64_s",
+            I32TruncSatF64U => "trunc_sat_f64_u",
+            I64TruncSatF32S => "trunc_sat_f32_s",
+            I64TruncSatF32U => "trunc_sat_f32_u",
+            I64TruncSatF64S => "trunc_sat_f64_s",
+            I64TruncSatF64U => "trunc_sat_f64_u",
         }
     }
 
@@ -336,6 +352,14 @@ impl UnaryExpression {
             I64Extend8S => wasm::ValType::I64,
             I64Extend16S => wasm::ValType::I64,
             I64Extend32S => wasm::ValType::I64,
+            I32TruncSatF32S => wasm::ValType::I32,
+            I32TruncSatF32U => wasm::ValType::I32,
+            I32TruncSatF64S => wasm::ValType::I32,
+            I32TruncSatF64U => wasm::ValType::I32,
+            I64TruncSatF32S => wasm::ValType::I64,
+            I64TruncSatF32U => wasm::ValType::I64,
+            I64TruncSatF64S => wasm::ValType::I64,
+            I64TruncSatF64U => wasm::ValType::I64,
         }
     }
 }
@@ -395,6 +419,14 @@ impl From<wasm::Operator<'_>> for UnaryExpression {
             wasm::Operator::I64Extend8S => UnaryExpression::I64Extend8S,
             wasm::Operator::I64Extend16S => UnaryExpression::I64Extend16S,
             wasm::Operator::I64Extend32S => UnaryExpression::I64Extend32S,
+            wasm::Operator::I32TruncSatF32S => UnaryExpression::I32TruncSatF32S,
+            wasm::Operator::I32TruncSatF32U => UnaryExpression::I32TruncSatF32U,
+            wasm::Operator::I32TruncSatF64S => UnaryExpression::I32TruncSatF64S,
+            wasm::Operator::I32TruncSatF64U => UnaryExpression::I32TruncSatF64U,
+            wasm::Operator::I64TruncSatF32S => UnaryExpression::I64TruncSatF32S,
+            wasm::Operator::I64TruncSatF32U => UnaryExpression::I64TruncSatF32U,
+            wasm::Operator::I64TruncSatF64S => UnaryExpression::I64TruncSatF64S,
+            wasm::Operator::I64TruncSatF64U => UnaryExpression::I64TruncSatF64U,
             _ => unreachable!(),
         }
     }

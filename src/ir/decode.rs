@@ -1161,7 +1161,15 @@ impl Builder {
             | wasm::Operator::I32Extend16S
             | wasm::Operator::I64Extend8S
             | wasm::Operator::I64Extend16S
-            | wasm::Operator::I64Extend32S => {
+            | wasm::Operator::I64Extend32S
+            | wasm::Operator::I32TruncSatF32S
+            | wasm::Operator::I32TruncSatF32U
+            | wasm::Operator::I32TruncSatF64S
+            | wasm::Operator::I32TruncSatF64U
+            | wasm::Operator::I64TruncSatF32S
+            | wasm::Operator::I64TruncSatF32U
+            | wasm::Operator::I64TruncSatF64S
+            | wasm::Operator::I64TruncSatF64U => {
                 let value = Box::new(self.pop());
                 self.stack.push(Expression::Unary(op.into(), value));
             }
