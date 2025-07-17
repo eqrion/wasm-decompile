@@ -1,12 +1,12 @@
 use crate::ir::*;
 
 #[derive(Clone, Copy)]
-struct Ctx<'b> {
-    func: &'b Func,
+pub(crate) struct Ctx<'b> {
+    pub(crate) func: &'b Func,
 }
 
 impl Block {
-    fn pretty<'b, D, A>(
+    pub fn pretty<'b, D, A>(
         &'b self,
         func: &Func,
         index: BlockIndex,
