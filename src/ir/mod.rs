@@ -6,6 +6,7 @@ use pretty::{DocAllocator, DocBuilder};
 use wasmparser::{self as wasm, FuncValidatorAllocations, WasmModuleResources};
 
 mod decode;
+mod graphviz;
 mod passes;
 mod print;
 
@@ -1018,6 +1019,23 @@ impl Module {
         self.funcs[def_func_index]
             .pretty::<_, ()>(&pretty::BoxAllocator)
             .render(80, &mut output)?;
+        writeln!(output)?;
+        Ok(())
+    }
+
+    pub fn write_func_graphviz(
+        &self,
+        func_index: u32,
+        mut output: impl std::io::Write,
+    ) -> anyhow::Result<()> {
+        if func_index < self.num_func_imports {
+            bail!("cannot decompile an imported function");
+        }
+        let def_func_index = (func_index - self.num_func_imports) as usize;
+        if def_func_index >= self.funcs.len() {
+            bail!("too large of a function index");
+        }
+        self.funcs[def_func_index].to_graphviz(&mut output);
         writeln!(output)?;
         Ok(())
     }
