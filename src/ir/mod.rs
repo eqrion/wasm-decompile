@@ -11,10 +11,10 @@ mod passes;
 mod print;
 
 #[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Copy, Clone, Hash)]
-pub struct BlockIndex(u32);
+pub(crate) struct BlockIndex(u32);
 
 #[derive(Debug, Clone)]
-pub struct Block {
+pub(crate) struct Block {
     params: Vec<wasm::ValType>,
     statements: Vec<Statement>,
     terminator: Terminator,
@@ -44,7 +44,7 @@ impl Block {
 }
 
 #[derive(Debug, Clone)]
-pub enum Terminator {
+pub(crate) enum Terminator {
     Unknown,
     Unreachable,
     Return(Vec<Expression>),
@@ -108,39 +108,39 @@ enum Statement {
 }
 
 #[derive(Debug, Clone)]
-pub struct LocalSetStatement {
+pub(crate) struct LocalSetStatement {
     index: u32,
     value: Box<Expression>,
 }
 
 #[derive(Debug, Clone)]
-pub struct LocalSetNStatement {
+pub(crate) struct LocalSetNStatement {
     index: Vec<u32>,
     value: Box<Expression>,
 }
 
 #[derive(Debug, Clone)]
-pub struct GlobalSetStatement {
+pub(crate) struct GlobalSetStatement {
     index: u32,
     value: Box<Expression>,
 }
 
 #[derive(Debug, Clone)]
-pub struct MemoryStoreStatement {
+pub(crate) struct MemoryStoreStatement {
     _arg: wasm::MemArg,
     index: Box<Expression>,
     value: Box<Expression>,
 }
 
 #[derive(Debug, Clone)]
-pub struct IfStatement {
+pub(crate) struct IfStatement {
     condition: Box<Expression>,
     true_statements: Vec<Statement>,
     false_statements: Vec<Statement>,
 }
 
 #[derive(Debug, Clone)]
-pub enum Expression {
+pub(crate) enum Expression {
     I32Const { value: i32 },
     I64Const { value: i64 },
     F32Const { value: wasm::Ieee32 },
@@ -165,7 +165,7 @@ pub enum Expression {
 }
 
 #[derive(Debug, Clone)]
-pub enum UnaryExpression {
+pub(crate) enum UnaryExpression {
     I32Eqz,
     I64Eqz,
     I32Clz,
@@ -433,7 +433,7 @@ impl From<wasm::Operator<'_>> for UnaryExpression {
 }
 
 #[derive(Debug, Clone)]
-pub enum BinaryExpression {
+pub(crate) enum BinaryExpression {
     I32Eq,
     I32Ne,
     I32LtS,
@@ -763,13 +763,13 @@ impl From<wasm::Operator<'_>> for BinaryExpression {
 }
 
 #[derive(Debug, Clone)]
-pub struct CallExpression {
+pub(crate) struct CallExpression {
     func_index: u32,
     params: Vec<Expression>,
 }
 
 #[derive(Debug, Clone)]
-pub struct CallIndirectExpression {
+pub(crate) struct CallIndirectExpression {
     func_type_index: u32,
     _table_index: u32,
     callee_index: Box<Expression>,
@@ -777,22 +777,22 @@ pub struct CallIndirectExpression {
 }
 
 #[derive(Debug, Clone)]
-pub struct GetLocalExpression {
+pub(crate) struct GetLocalExpression {
     local_index: u32,
 }
 
 #[derive(Debug, Clone)]
-pub struct GetLocalNExpression {
+pub(crate) struct GetLocalNExpression {
     local_indices: Vec<u32>,
 }
 
 #[derive(Debug, Clone)]
-pub struct GetGlobalExpression {
+pub(crate) struct GetGlobalExpression {
     global_index: u32,
 }
 
 #[derive(Debug, Clone)]
-pub struct SelectExpression {
+pub(crate) struct SelectExpression {
     condition: Box<Expression>,
     on_true: Box<Expression>,
     on_false: Box<Expression>,
@@ -860,14 +860,14 @@ impl MemoryLoadKind {
 }
 
 #[derive(Debug, Clone)]
-pub struct MemoryLoadExpression {
+pub(crate) struct MemoryLoadExpression {
     kind: MemoryLoadKind,
     _arg: wasm::MemArg,
     index: Box<Expression>,
 }
 
 #[derive(Debug, Clone)]
-pub struct MemoryGrowExpression {
+pub(crate) struct MemoryGrowExpression {
     value: Box<Expression>,
 }
 
@@ -876,7 +876,7 @@ struct Local {
     name: String,
 }
 
-struct Func {
+pub(crate) struct Func {
     // name: String,
     index: u32,
     ty: wasm::FuncType,
@@ -1067,7 +1067,7 @@ impl Module {
         if def_func_index >= self.funcs.len() {
             bail!("too large of a function index");
         }
-        self.funcs[def_func_index].to_graphviz(&mut output);
+        self.funcs[def_func_index].to_graphviz(&mut output)?;
         writeln!(output)?;
         Ok(())
     }

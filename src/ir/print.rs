@@ -6,7 +6,7 @@ pub(crate) struct Ctx<'b> {
 }
 
 impl Block {
-    pub fn pretty<'b, D, A>(
+    pub(crate) fn pretty<'b, D, A>(
         &'b self,
         func: &Func,
         index: BlockIndex,
@@ -486,7 +486,7 @@ impl MemoryGrowExpression {
 }
 
 impl Func {
-    pub fn pretty<'b, D, A>(&'b self, allocator: &'b D) -> DocBuilder<'b, D, A>
+    pub(crate) fn pretty<'b, D, A>(&'b self, allocator: &'b D) -> DocBuilder<'b, D, A>
     where
         D: DocAllocator<'b, A>,
         D::Doc: Clone,
@@ -566,7 +566,7 @@ impl Func {
 }
 
 impl Module {
-    pub fn pretty<'b, D, A>(&'b self, allocator: &'b D) -> DocBuilder<'b, D, A>
+    pub(crate) fn pretty<'b, D, A>(&'b self, allocator: &'b D) -> DocBuilder<'b, D, A>
     where
         D: DocAllocator<'b, A>,
         D::Doc: Clone,
